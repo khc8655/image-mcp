@@ -1,0 +1,9 @@
+# Git ignore file to prevent pushing secrets and local config
+.DS_Store
+node_modules/
+.dev.vars
+.wrangler/
+caddy/
+caddy_khc/
+test_*.png
+package-lock.json
