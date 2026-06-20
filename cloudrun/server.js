@@ -57,7 +57,7 @@ function getCache(env) {
 
   // Add Agnes 2.0 Flash to display list
   const textModelsList = displayModels.map(id => ({ id, object: "model", created: 1720000000, owned_by: "google" }));
-  textModelsList.push({ id: "agnes/agnes-2.0-flash", object: "model", created: 1720000000, owned_by: "agnes" });
+  textModelsList.push({ id: "agnes-2.0-flash", object: "model", created: 1720000000, owned_by: "agnes" });
 
   _cache = {
     textSet: new Set(userTextModels),
@@ -187,6 +187,11 @@ app.post(["/v1/chat/completions", "/chat/completions"], async (req, res) => {
       const contentType = upstreamRes.headers.get("Content-Type") || "application/json";
       res.setHeader("Content-Type", contentType);
 
+      if (!upstreamRes.ok) {
+        const errText = await upstreamRes.text().catch(() => "Unknown upstream error");
+        return res.send(errText);
+      }
+
       if (body.stream) {
         res.setHeader("Cache-Control", "no-cache");
         res.setHeader("Connection", "keep-alive");
@@ -258,6 +263,11 @@ app.post(["/v1/chat/completions", "/chat/completions"], async (req, res) => {
     res.status(upstreamRes.status);
     const contentType = upstreamRes.headers.get("Content-Type") || "application/json";
     res.setHeader("Content-Type", contentType);
+
+    if (!upstreamRes.ok) {
+      const errText = await upstreamRes.text().catch(() => "Unknown upstream error");
+      return res.send(errText);
+    }
 
     if (body.stream) {
       res.setHeader("Cache-Control", "no-cache");
@@ -714,25 +724,20 @@ async function resolveImageToBase64(imageStr) {
   imageStr = (imageStr || "").trim();
   if (!imageStr) throw new Error("Image source is empty");
 
+  // If already a data URL, extract the base64 part.
   if (imageStr.startsWith("data:image/")) {
     const parts = imageStr.split(",");
-    if (parts.length > 1) return parts[1];
-    return parts[0];
+    return parts.length > 1 ? parts[1] : parts[0];
   }
 
-  if (
-    (!imageStr.startsWith("http://") && !imageStr.startsWith("https://") && !imageStr.includes("/") && !imageStr.includes("\\") && imageStr.length > 100) ||
-    (imageStr.length > 1000 && !imageStr.startsWith("http://") && !imageStr.startsWith("https://"))
-  ) {
-    return imageStr;
-  }
-
+  // If it looks like an HTTP(S) URL, download the image.
   if (imageStr.startsWith("http://") || imageStr.startsWith("https://")) {
     validateUrlSafety(imageStr);
     return await downloadImageAsBase64(imageStr);
   }
 
-  throw new Error("Local filesystem paths are not supported directly in the cloud environment. Please provide a web URL or Base64 string.");
+  // Otherwise assume the string is a raw base64 payload.
+  return imageStr;
 }
 
 async function downloadImageAsBase64(url) {
@@ -744,13 +749,8 @@ async function downloadImageAsBase64(url) {
   if (contentLength && parseInt(contentLength, 10) > 10 * 1024 * 1024) {
     throw new Error("Image size exceeds the 10MB limit to protect server memory.");
   }
-  const buffer = await resp.arrayBuffer();
-  const bytes = new Uint8Array(buffer);
-  let binary = "";
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
+  const arrayBuffer = await resp.arrayBuffer();
+  return Buffer.from(arrayBuffer).toString('base64');
 }
 
 async function callGoogleEnhancePrompt(prompt, style_preset, env) {
