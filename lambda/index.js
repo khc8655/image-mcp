@@ -173,7 +173,24 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream,
     return;
   }
 
-  // 2. Health & Index route (no authentication required)
+  // 2. Client authentication check for all routes
+  if (!checkAuth(event, env)) {
+    responseStream = awslambda.HttpResponseStream.from(responseStream, {
+      statusCode: 401,
+      headers: corsHeaders({ "Content-Type": "application/json" })
+    });
+    responseStream.write(JSON.stringify({
+      error: {
+        message: "Unauthorized: Invalid or missing CLIENT_AUTH_TOKEN",
+        type: "proxy_error",
+        code: 401
+      }
+    }));
+    responseStream.end();
+    return;
+  }
+
+  // 3. Health & Index route
   if (path === "/" || path === "/health") {
     const project = (env.VERTEX_PROJECT || "").trim();
     const location = env.VERTEX_LOCATION || "global";
@@ -189,23 +206,6 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream,
       location,
       text_models: [...textSet],
       image_models: [...imageSet]
-    }));
-    responseStream.end();
-    return;
-  }
-
-  // 3. Client authentication check for all other routes
-  if (!checkAuth(event, env)) {
-    responseStream = awslambda.HttpResponseStream.from(responseStream, {
-      statusCode: 401,
-      headers: corsHeaders({ "Content-Type": "application/json" })
-    });
-    responseStream.write(JSON.stringify({
-      error: {
-        message: "Unauthorized: Invalid or missing CLIENT_AUTH_TOKEN",
-        type: "proxy_error",
-        code: 401
-      }
     }));
     responseStream.end();
     return;
