@@ -47,8 +47,11 @@ function getCache(env) {
     ? userTextModels 
     : ["google/gemini-3.1-flash-lite"];
 
+  // Filter out Agnes from the display list mapping to prevent duplication
+  const filteredDisplay = displayModels.filter(id => id !== "agnes-2.0-flash" && id !== "agnes/agnes-2.0-flash");
+
   // Add Agnes 2.0 Flash to display list
-  const textModelsList = displayModels.map(id => ({ id, object: "model", created: 1720000000, owned_by: "google" }));
+  const textModelsList = filteredDisplay.map(id => ({ id, object: "model", created: 1720000000, owned_by: "google" }));
   textModelsList.push({ id: "agnes-2.0-flash", object: "model", created: 1720000000, owned_by: "agnes" });
 
   _cache = {
