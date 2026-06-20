@@ -55,10 +55,14 @@ function getCache(env) {
     ? userTextModels 
     : ["google/gemini-3.1-flash-lite"];
 
+  // Add Agnes 2.0 Flash to display list
+  const textModelsList = displayModels.map(id => ({ id, object: "model", created: 1720000000, owned_by: "google" }));
+  textModelsList.push({ id: "agnes/agnes-2.0-flash", object: "model", created: 1720000000, owned_by: "agnes" });
+
   _cache = {
     textSet: new Set(userTextModels),
     imageSet: new Set(SUPPORTED_IMAGE_MODELS),
-    textModelsList: displayModels.map(id => ({ id, object: "model", created: 1720000000, owned_by: "google" })),
+    textModelsList: textModelsList,
   };
   return _cache;
 }
@@ -151,6 +155,60 @@ app.get("/v1/models", (req, res) => {
 // 3. OpenAI v1/chat/completions
 app.post(["/v1/chat/completions", "/chat/completions"], async (req, res) => {
   const env = process.env;
+  const body = req.body;
+
+  if (!body.model) {
+    return res.status(400).json({ error: { message: "model is required", type: "proxy_error", code: 400 } });
+  }
+
+  // Detect Agnes 2.0 Flash text model forwarding
+  const modelName = body.model.trim();
+  if (modelName === "agnes/agnes-2.0-flash" || modelName === "agnes-2.0-flash") {
+    const agnesApiKey = (env.AGNES_API_KEY || "").trim();
+    if (!agnesApiKey) {
+      return res.status(500).json({ error: { message: "AGNES_API_KEY not configured on backend", type: "proxy_error", code: 500 } });
+    }
+
+    // Force normalized model name for upstream
+    body.model = "agnes-2.0-flash";
+
+    const upstreamUrl = "https://apihub.agnes-ai.com/v1/chat/completions";
+    try {
+      const upstreamRes = await fetch(upstreamUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${agnesApiKey}`
+        },
+        body: JSON.stringify(body),
+      });
+
+      res.status(upstreamRes.status);
+      const contentType = upstreamRes.headers.get("Content-Type") || "application/json";
+      res.setHeader("Content-Type", contentType);
+
+      if (body.stream) {
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
+        
+        const reader = upstreamRes.body.getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          res.write(value);
+        }
+        res.end();
+      } else {
+        const data = await upstreamRes.json();
+        res.json(data);
+      }
+    } catch (e) {
+      res.status(502).json({ error: { message: "Agnes upstream error: " + e.message, type: "proxy_error", code: 502 } });
+    }
+    return;
+  }
+
+  // --- Default: Vertex AI (Google) forwarding ---
   const project = (env.VERTEX_PROJECT || "").trim();
   const location = env.VERTEX_LOCATION || "global";
   const apiKey = (env.VERTEX_API_KEY || "").trim();
@@ -159,7 +217,6 @@ app.post(["/v1/chat/completions", "/chat/completions"], async (req, res) => {
   if (!apiKey) return res.status(500).json({ error: { message: "VERTEX_API_KEY not configured on backend", type: "proxy_error", code: 500 } });
 
   const { textSet } = getCache(env);
-  const body = req.body;
 
   if (body.model && !body.model.startsWith("google/")) {
     body.model = "google/" + body.model;
@@ -207,8 +264,6 @@ app.post(["/v1/chat/completions", "/chat/completions"], async (req, res) => {
       res.setHeader("Connection", "keep-alive");
       
       const reader = upstreamRes.body.getReader();
-      const decoder = new TextDecoder();
-      
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
