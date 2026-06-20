@@ -20,7 +20,7 @@ zip -r function.zip index.js package.json
 2. 点击 **Create function (创建函数)**：
    * 选择 **Author from scratch (从头开始创作)**。
    * **Function name (函数名称)**：填写如 `vertex-unified-proxy`。
-   * **Runtime (运行时)**：选择 **Node.js 20.x** (或 Node.js 18.x)。
+   * **Runtime (运行时)**：选择 **Node.js 22.x**。
    * **Architecture (架构)**：推荐选择 **arm64**（更便宜且性能更佳），或者默认 `x86_64`。
    * 其他保持默认，点击 **Create function**。
 
