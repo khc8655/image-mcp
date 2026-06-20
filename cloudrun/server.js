@@ -33,14 +33,24 @@ const AGNES_VIDEO_MODELS = ["agnes/agnes-video-v2.0"];
 const DEFAULT_IMAGE_MODEL = "google/gemini-2.5-flash-image";
 const DEFAULT_VIDEO_MODEL = "agnes/agnes-video-v2.0";
 
-// Helper utilities
 function parseModels(str) {
   if (!str) return [];
   return str
     .split(",")
     .map(s => s.trim())
     .filter(Boolean)
-    .map(m => (m.startsWith("google/") ? m : "google/" + m));
+    .map(m => {
+      if (
+        m.startsWith("google/") ||
+        m.startsWith("agnes/") ||
+        m.startsWith("minimax/") ||
+        m.startsWith("sensenova/") ||
+        m === "agnes-2.0-flash"
+      ) {
+        return m;
+      }
+      return "google/" + m;
+    });
 }
 
 function stripPrefix(m) {
@@ -163,7 +173,7 @@ app.post(["/v1/chat/completions", "/chat/completions"], async (req, res) => {
 
   // Detect Agnes 2.0 Flash text model forwarding
   const modelName = body.model.trim();
-  if (modelName === "agnes/agnes-2.0-flash" || modelName === "agnes-2.0-flash") {
+  if (modelName === "agnes/agnes-2.0-flash" || modelName === "agnes-2.0-flash" || modelName === "google/agnes-2.0-flash") {
     const agnesApiKey = (env.AGNES_API_KEY || "").trim();
     if (!agnesApiKey) {
       return res.status(500).json({ error: { message: "AGNES_API_KEY not configured on backend", type: "proxy_error", code: 500 } });
