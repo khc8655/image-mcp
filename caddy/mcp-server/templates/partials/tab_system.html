@@ -1,0 +1,70 @@
+<!-- 系统配置 Tab (公用底层资产) -->
+<section id="tab-system" class="tab-section" style="display:none;">
+  <!-- 1. 凭据中枢 -->
+  <div class="card">
+    <div class="card-header-row">
+      <h2>EdgeOne 凭据中枢 (Vault Central)</h2>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-secondary btn-small" type="button" onclick="testVaultConnectivity()" id="btnTestVault">
+          <svg class="icon"><use href="#icon-check"/></svg>
+          <span>测试中枢连接</span>
+        </button>
+        <button class="btn btn-primary btn-small" type="button" onclick="syncAllVaultCredentials()" id="btnSyncAllVault">
+          <svg class="icon"><use href="#icon-download"/></svg>
+          <span>一键同步全部凭据</span>
+        </button>
+      </div>
+    </div>
+    <p class="card-subtitle">
+      所有厂商的 API Key 统一由 EdgeOne 中枢托管。点击「一键同步全部凭据」将自动对齐所有已授权厂商与密钥，本地无需手动维护。
+    </p>
+
+    <div class="form-grid-2">
+      <div class="form-field">
+        <label>EdgeOne 中枢地址 (Vault URL)</label>
+        <input type="text" id="cfg_vault_url" placeholder="https://api.khc6.cn">
+      </div>
+      <div class="form-field">
+        <label>EdgeOne 访问密钥 (PROXY_API_KEY)</label>
+        <input type="password" id="cfg_vault_token" placeholder="输入中枢访问密钥">
+      </div>
+    </div>
+    <div id="vaultDiagAlert" style="display:none;margin-top:8px;"></div>
+  </div>
+
+  <!-- 2. 模型适配规则库 (Presets Engine) -->
+  <div class="card">
+    <div class="card-header-row">
+      <h2>模型适配规则库 (Presets Engine)</h2>
+      <button class="btn btn-secondary btn-small" type="button" onclick="reloadAllPresets()" id="btnCardReloadPresets">
+        <svg class="icon"><use href="#icon-refresh"/></svg>
+        <span>重新载入适配规则</span>
+      </button>
+    </div>
+    <p class="card-subtitle">
+      包含 Google Gemini、MiniMax、SenseNova、Agnes AI 等厂商的官方协议驱动与长宽比规范。新增或优化模型只需更新规则文件，主程序免重启免改代码。
+    </p>
+
+    <div id="presetsStatusList" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;"></div>
+  </div>
+
+  <!-- 3. 访问安全 -->
+  <div class="card">
+    <div class="card-header-row">
+      <h2>访问安全与服务状态 (Security & Runtime)</h2>
+      <button class="btn btn-primary btn-small" type="button" onclick="saveAdminToken()">保存新 Token</button>
+    </div>
+    <p class="card-subtitle">管理端 Admin Token 同时也是 MCP 客户端调用 <code>/mcp</code> 端点时的 Bearer 鉴权凭证。</p>
+
+    <div class="form-grid-2">
+      <div class="form-field">
+        <label>控制台 / MCP 客户端鉴权 Token</label>
+        <input type="password" id="cfg_admin_token" placeholder="输入新的 Admin Token">
+      </div>
+      <div class="form-field">
+        <label>MCP 2.0.0 规范端点</label>
+        <input type="text" readonly value="https://oc.khc6.cn/mcp" class="mono-text" style="background:var(--khc-surface-base);">
+      </div>
+    </div>
+  </div>
+</section>

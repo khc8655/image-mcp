@@ -1,0 +1,25 @@
+name = "vertex-ai-openai-proxy"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+compatibility_flags = [ "nodejs_compat" ]
+keep_vars = true
+
+# 环境变量配置说明 (生产环境请在 Cloudflare Workers 控制台的 Settings -> Variables and Secrets 中配置):
+#
+# 1. 客户端安全鉴权:
+#    - CLIENT_AUTH_TOKEN : 选填。客户端请求时需携带的 Token。若为空，则不进行鉴权。
+#
+# 2. Google Vertex AI 配置:
+#    - VERTEX_PROJECT    : 必填。GCP 项目 ID (例如 "jjb111")。
+#    - VERTEX_API_KEY    : 必填。Vertex AI API 密钥。
+#    - VERTEX_LOCATION   : 选填。区域，默认 "global"。
+#    - TEXT_MODELS       : 选填/建议。允许对外暴露的文本模型列表 (逗号分隔，不带 google/ 前缀，例如 "gemini-3.5-flash,gemini-3.1-flash-lite")。
+#
+# 3. 第三方平台 API 密钥:
+#    - AGNES_API_KEY     : 选填。Agnes AI 的 API 密钥，用于图片及视频生成。
+#    - SENSENOVA_API_KEY : 选填。商汤日日新 (SenseNova) 的 API 密钥，用于图片生成。
+
+[[routes]]
+pattern = "g.khc6.cc.cd"
+custom_domain = true
+

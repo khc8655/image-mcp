@@ -1,0 +1,123 @@
+<!-- 挂载模型弹窗 (生图 / 识图 统一挂载面板) -->
+<div class="modal-overlay" id="bindModelModal" onclick="if(event.target===this)closeModal('bindModelModal')">
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <h3 id="bindModalTitle">挂载模型</h3>
+      <button class="modal-close" type="button" onclick="closeModal('bindModelModal')">
+        <svg class="icon"><use href="#icon-close"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="bind_target_type" value="generation">
+      <input type="hidden" id="bind_selected_model" value="">
+      
+      <div class="form-field">
+        <label>1. 选择厂商</label>
+        <select id="bind_provider_select" onchange="onBindProviderChange()"></select>
+      </div>
+
+      <div class="form-field" style="margin-top:14px;">
+        <label id="bind_model_label">2. 选择模型 (点击单选)</label>
+        <div id="bind_model_cards" class="capsule-list" style="display:flex;flex-direction:column;gap:8px;max-height:200px;overflow-y:auto;margin-top:6px;"></div>
+      </div>
+
+      <div class="form-field" id="bind_role_field" style="margin-top:14px;">
+        <label id="bind_role_label">3. 偏好角色标签</label>
+        <select id="bind_role_select"></select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" type="button" onclick="closeModal('bindModelModal')">取消</button>
+      <button class="btn btn-primary" type="button" id="btnConfirmBindModel" onclick="confirmBindModel()">确定挂载</button>
+    </div>
+  </div>
+</div>
+
+<!-- 编辑模型弹窗 (编辑角色与高级参数) -->
+<div class="modal-overlay" id="editModelModal" onclick="if(event.target===this)closeModal('editModelModal')">
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <h3 id="editModalTitle">编辑模型配置</h3>
+      <button class="modal-close" type="button" onclick="closeModal('editModelModal')">
+        <svg class="icon"><use href="#icon-close"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="edit_target_type" value="generation">
+      <input type="hidden" id="edit_model_index" value="-1">
+      
+      <div class="form-grid-2">
+        <div class="form-field">
+          <label>模型 ID</label>
+          <input type="text" id="edit_model_id" readonly class="mono-text font-bold" style="background:var(--color-bg-page);color:var(--color-primary);">
+        </div>
+        <div class="form-field">
+          <label>所属厂商</label>
+          <input type="text" id="edit_model_provider" readonly style="background:var(--color-bg-page);">
+        </div>
+      </div>
+
+      <div class="form-field" style="margin-top:12px;">
+        <label>偏好角色</label>
+        <select id="edit_role_select"></select>
+      </div>
+
+      <!-- 高级参数区域 (针对特定厂商动态显示) -->
+      <div id="editAdvancedSection" style="display:none;margin-top:16px;padding-top:14px;border-top:1px dashed var(--color-border);">
+        <label class="font-bold" style="font-size:13px;display:block;margin-bottom:8px;">高级控制参数 (可选)</label>
+        
+        <!-- MiniMax 专属参数 -->
+        <div id="editAdvMinimax" style="display:none;display:flex;flex-direction:column;gap:8px;">
+          <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;">
+            <input type="checkbox" id="adv_minimax_optimizer" checked>
+            <span>启用官方 Prompt 优化器 (自动扩展美化提示词)</span>
+          </label>
+          <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;">
+            <input type="checkbox" id="adv_minimax_watermark">
+            <span>官方 AIGC 水印</span>
+          </label>
+        </div>
+
+        <!-- FLUX / Agnes 专属参数 -->
+        <div id="editAdvAgnes" style="display:none;display:flex;flex-direction:column;gap:8px;">
+          <div class="form-field">
+            <label style="font-size:12px;">默认分辨率画质</label>
+            <select id="adv_agnes_size">
+              <option value="1K">1K (标准速度)</option>
+              <option value="2K" selected>2K (超高清细节)</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label style="font-size:12px;">默认负向提示词 (Negative Prompt)</label>
+            <input type="text" id="adv_agnes_neg" placeholder="如：blurry, low quality, distorted">
+          </div>
+        </div>
+
+        <!-- Google Imagen / Gemini 专属参数 -->
+        <div id="editAdvGoogle" style="display:none;display:flex;flex-direction:column;gap:8px;">
+          <div class="form-field">
+            <label style="font-size:12px;">默认输出分辨率 (Gemini 3 Pro 原生)</label>
+            <select id="adv_google_image_size">
+              <option value="auto">auto (模型自适应)</option>
+              <option value="1K">1K (标准 1024)</option>
+              <option value="2K" selected>2K (超清 2048)</option>
+              <option value="4K">4K (极致 4096)</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label style="font-size:12px;">人像生成控制 (Person Generation)</label>
+            <select id="adv_google_person">
+              <option value="ALLOW_ADULT" selected>ALLOW_ADULT (允许成年人人像)</option>
+              <option value="DONT_ALLOW">DONT_ALLOW (禁止人像生成)</option>
+              <option value="ALLOW_ALL">ALLOW_ALL (允许所有人像)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" type="button" onclick="closeModal('editModelModal')">取消</button>
+      <button class="btn btn-primary" type="button" id="btnConfirmEditModel" onclick="confirmEditModel()">保存修改</button>
+    </div>
+  </div>
+</div>

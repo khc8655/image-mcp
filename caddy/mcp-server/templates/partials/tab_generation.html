@@ -1,0 +1,84 @@
+<!-- 生图管理 Tab -->
+<section id="tab-generation" class="tab-section">
+  <!-- 1. 调度策略 -->
+  <div class="card">
+    <div class="card-header-row">
+      <h2>生图调度策略</h2>
+    </div>
+    <p class="card-subtitle">
+      生图调度采用<strong>顺序优先级模式</strong>：默认调用列表排在第 1 位的首选模型；当首选模型发生故障、限流或超时时，自动按序号向下执行故障切换。Agent 调用时也可显式传入模型名称进行定向调度。
+    </p>
+
+    <div class="form-grid-2">
+      <div class="form-field">
+        <label>出图超时时间 (秒)</label>
+        <input type="number" id="cfg_gen_timeout" min="10" max="180" value="45" title="超过此时间将主动熔断并触发备用模型切换">
+      </div>
+      <div class="form-field">
+        <label>默认输出分辨率 (Resolution)</label>
+        <select id="cfg_gen_resolution">
+          <option value="auto">auto — 自动适配模型最优规格</option>
+          <option value="1K">1K — 标准高清 (1024 / 极速出图)</option>
+          <option value="2K" selected>2K — 超清细节 (2048 / 推荐办公图表)</option>
+          <option value="4K">4K — 极致印刷级 (Gemini 3 Pro 原生)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-grid-2" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--khc-border-subtle);">
+      <div class="form-field">
+        <label>默认宽高比 (Aspect Ratio)</label>
+        <select id="cfg_gen_aspect">
+          <option value="1:1">1:1 — 正方形 (图标 / 徽标 / 头像)</option>
+          <option value="16:9" selected>16:9 — 宽屏横版 (PPT 幻灯片 / 拓扑大图 / 场景展示)</option>
+          <option value="21:9">21:9 — 超宽带状 (全景拓扑 / 复杂系统端到端流转图)</option>
+          <option value="3:2">3:2 — 经典横构图 (技术白皮书配图 / 摄影)</option>
+          <option value="4:3">4:3 — 传统标准比例 (文档说明插图)</option>
+          <option value="4:5">4:5 — 竖版海报</option>
+          <option value="3:4">3:4 — 竖屏文档配图</option>
+          <option value="9:16">9:16 — 移动端竖屏海报</option>
+        </select>
+      </div>
+      <div class="form-field">
+        <label>默认办公场景预设 (Scene Preset)</label>
+        <select id="cfg_gen_scene">
+          <option value="auto" selected>auto — 自由生图 (纯跟随 Prompt)</option>
+          <option value="infra_scene">infra_scene — 信息化场景图 (智慧园区/数据中心全景/2.5D等距)</option>
+          <option value="network_topology">network_topology — 网络拓扑图 (扁平节点/网络线缆/企业IT架构)</option>
+          <option value="architecture">architecture — 系统软件架构图 (分层微服务/模块分区/色块明晰)</option>
+          <option value="infographic">infographic — 科技信息图 (汇报海报/技术白皮书/工整中文排版)</option>
+          <option value="icon_set">icon_set — 科技图标组 (极简扁平/一致色调/透明白底)</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. 活跃模型池 -->
+  <div class="card">
+    <div class="card-header-row">
+      <h2>生图活跃模型池 (Active Models)</h2>
+      <button class="btn btn-primary btn-small" type="button" onclick="openBindModelModal('generation')">
+        <svg class="icon"><use href="#icon-plus"/></svg>
+        <span>+ 挂载生图模型</span>
+      </button>
+    </div>
+    <p class="card-subtitle">当前可用于生图调度的模型。排在第 1 位的为主力模型，遇到故障自动向下顺延故障切换（直接修改数字即可调整排序）。</p>
+
+
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th style="width:58px;text-align:center;"># 排序</th>
+          <th>模型 ID</th>
+          <th>厂商</th>
+          <th>偏好角色</th>
+          <th>状态</th>
+          <th style="text-align:right;">操作</th>
+        </tr>
+      </thead>
+      <tbody id="genModelsTbody">
+        <tr><td colspan="6" class="muted" style="text-align:center;padding:24px;">加载中...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>

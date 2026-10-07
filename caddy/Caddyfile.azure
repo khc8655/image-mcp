@@ -1,0 +1,54 @@
+{
+	auto_https off
+	admin off
+}
+
+:3000 {
+	# ── 1. Web 管理控制台与静态资源 (/admin*, /static*, /api*) ──
+	@admin_routes {
+		path /admin /admin/* /static/* /api/*
+	}
+	handle @admin_routes {
+		reverse_proxy 127.0.0.1:{env.MCP_SERVER_PORT}
+	}
+
+	# ── 2. MCP 2.0.0 Server (CORS OPTIONS 预检放行) ──
+	@mcp_options {
+		path /mcp /mcp/*
+		method OPTIONS
+	}
+	handle @mcp_options {
+		header Access-Control-Allow-Origin "*"
+		header Access-Control-Allow-Methods "GET, POST, OPTIONS, DELETE"
+		header Access-Control-Allow-Headers "Content-Type, Authorization, Mcp-Protocol-Version, Mcp-Session-Id"
+		header Access-Control-Expose-Headers "Mcp-Session-Id, Mcp-Protocol-Version"
+		header Access-Control-Max-Age "86400"
+		respond "" 204
+	}
+
+	# ── 3. MCP Server 实际业务请求 — 需 Bearer 鉴权 ──
+	@mcp_path {
+		path /mcp /mcp/*
+		not method OPTIONS
+	}
+	@auth_mcp {
+		header Authorization "Bearer {env.CLIENT_AUTH_TOKEN}"
+	}
+	handle @mcp_path {
+		handle @auth_mcp {
+			header Access-Control-Allow-Origin "*"
+			header Access-Control-Expose-Headers "Mcp-Session-Id, Mcp-Protocol-Version"
+			reverse_proxy 127.0.0.1:{env.MCP_SERVER_PORT} {
+				flush_interval -1
+				header_down Cache-Control "no-cache, no-transform"
+				header_down X-Accel-Buffering "no"
+			}
+		}
+		respond 401
+	}
+
+	# 默认拒绝未匹配路径
+	handle {
+		respond "Not Found" 404
+	}
+}

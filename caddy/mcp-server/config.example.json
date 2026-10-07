@@ -1,0 +1,184 @@
+{
+  "auth": {
+    "admin_token": "your_secure_admin_token_here"
+  },
+  "edgeone_vault": {
+    "url": "https://api.khc6.cn",
+    "token": ""
+  },
+  "providers": {
+    "google": {
+      "name": "Google Gemini",
+      "base_url": "https://api.google.com/v1",
+      "protocol": "openai",
+      "preset_version": "1.3.0",
+      "adapter_rules": {
+        "image_generation": {
+          "protocol": "gemini_generate_content",
+          "native_base_url": "https://generativelanguage.googleapis.com/v1beta/models",
+          "vertex_project": "your-gcp-project",
+          "vertex_location": "global",
+          "endpoint_suffix": ":generateContent",
+          "supports_edit": true,
+          "response_modalities": [
+            "TEXT",
+            "IMAGE"
+          ]
+        },
+        "vertex_project": "your-gcp-project",
+        "vertex_location": "global"
+      },
+      "models": [
+        "gemini-3.5-flash",
+        "gemini-2.5-flash",
+        "gemini-2.5-pro"
+      ],
+      "image_models": [
+        "gemini-3.1-flash-lite-image",
+        "gemini-3.1-flash-image",
+        "gemini-3-pro-image",
+        "gemini-2.5-flash-image",
+        "imagen-3.0-generate-002"
+      ],
+      "keys": {},
+      "key_labels": []
+    },
+    "minimax": {
+      "name": "MiniMax",
+      "base_url": "https://api.minimax.com/v1",
+      "protocol": "openai",
+      "preset_version": "1.3.0",
+      "adapter_rules": {
+        "image_generation": {
+          "protocol": "minimax_image",
+          "base_url": "https://api.minimaxi.com/v1",
+          "endpoint": "/image_generation",
+          "supports_edit": true,
+          "default_params": {
+            "response_format": "base64",
+            "prompt_optimizer": true
+          },
+          "edit_reference_field": "subject_reference",
+          "edit_reference_type": "character",
+          "response_path": "data.image_base64"
+        }
+      },
+      "models": [
+        "MiniMax-M3"
+      ],
+      "image_models": [
+        "image-01",
+        "image-01-live"
+      ],
+      "keys": {},
+      "key_labels": []
+    },
+    "sensenova": {
+      "name": "商汤日日新 (SenseNova)",
+      "base_url": "https://token.sensenova.cn/v1",
+      "protocol": "openai",
+      "preset_version": "1.1.0",
+      "adapter_rules": {
+        "image_generation": {
+          "protocol": "openai_images",
+          "base_url": "https://token.sensenova.cn/v1",
+          "endpoint": "/images/generations",
+          "supports_edit": false,
+          "size_map": {
+            "1:1": "2048x2048",
+            "16:9": "2752x1536",
+            "9:16": "1536x2752",
+            "4:3": "2272x1824",
+            "3:4": "1824x2272",
+            "3:2": "2496x1664",
+            "2:3": "1664x2496",
+            "21:9": "3072x1344"
+          },
+          "response_b64_fields": [
+            "b64_image",
+            "b64_json",
+            "base64"
+          ]
+        }
+      },
+      "models": [
+        "sensenova-6.8-flash-lite"
+      ],
+      "image_models": [
+        "sensenova-u1-fast"
+      ],
+      "keys": {},
+      "key_labels": []
+    },
+    "agnes": {
+      "name": "Agnes AI",
+      "base_url": "https://apihub.agnes-ai.com/v1",
+      "protocol": "openai",
+      "preset_version": "1.3.0",
+      "models": [
+        "agnes-3.0-flash",
+        "agnes-2.5-flash"
+      ],
+      "image_models": [
+        "agnes-image-2.5-flash"
+      ],
+      "keys": {},
+      "key_labels": []
+    }
+  },
+  "generation": {
+    "default_mode": "sequential",
+    "timeout_seconds": 45,
+    "fallback_enabled": true,
+    "default_aspect": "1:1",
+    "default_resolution": "auto",
+    "default_scene": "none",
+    "models": [
+      {
+        "model": "gemini-3.1-flash-lite-image",
+        "provider": "google",
+        "role": "general",
+        "enabled": true
+      },
+      {
+        "model": "image-01",
+        "provider": "minimax",
+        "role": "general",
+        "enabled": true
+      },
+      {
+        "model": "sensenova-u1-fast",
+        "provider": "sensenova",
+        "role": "general",
+        "enabled": true
+      }
+    ]
+  },
+  "vision": {
+    "default_mode": "sequential",
+    "timeout_seconds": 45,
+    "fallback_enabled": true,
+    "default_preset": "standard",
+    "rapidocr_enabled": true,
+    "models": [
+      {
+        "model": "gemini-3.5-flash",
+        "provider": "google",
+        "role": "general",
+        "enabled": true
+      },
+      {
+        "model": "MiniMax-M3",
+        "provider": "minimax",
+        "role": "document",
+        "enabled": true
+      }
+    ]
+  },
+  "search": {
+    "default_text_engine": "duckduckgo",
+    "pexels_api_key": "",
+    "reverse_search_use_ocr": true,
+    "max_results": 6
+  }
+}

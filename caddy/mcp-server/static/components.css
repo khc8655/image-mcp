@@ -1,0 +1,139 @@
+/* ═══════════════════════════════════════════════════════════════
+   components.css — Design System Component Definitions
+   Auto-extracted from preview/component-*.html
+   DO NOT EDIT MANUALLY — regenerate via extract-components-css.mjs
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Alert ─────────────────────────────────────────────────── */
+/* @anatomy
+   <span class="label">提示</span><div class="alert info" data-evidence-sample="Info Alert"><svg class="icon"><use href="#icon-info"/></svg><span class="message">后台数据将于每日凌晨 02:00 自动同步。</span>
+*/
+.alert { display: flex; align-items: flex-start; gap: var(--space-2); width: 100%; border-radius: var(--radius-md); padding: 10px 14px; font-size: 13px; line-height: var(--line-height-body); box-sizing: border-box; }
+    .alert.info { background: var(--khc-primary-50); border: 1px solid var(--khc-primary-200); color: var(--color-text-2); }
+    .alert.success { background: var(--khc-success-50); border: 1px solid var(--khc-success-200); color: var(--khc-success-700); }
+    .alert.warning { background: var(--khc-warning-50); border: 1px solid var(--khc-warning-200); color: var(--khc-warning-700); }
+    .alert.error { background: var(--khc-danger-50); border: 1px solid var(--khc-danger-200); color: var(--khc-danger-700); }
+    .alert .icon { flex-shrink: 0; width: var(--size-icon-sm); height: var(--size-icon-sm); margin-top: 1px; color: var(--color-primary); }
+    .alert.success .icon { color: var(--color-success); }
+    .alert.warning .icon { color: var(--color-warning); }
+    .alert.error .icon { color: var(--color-danger); }
+    .alert .message { flex: 1; min-width: 0; }
+    .alert .close { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: var(--size-icon-md); height: var(--size-icon-md); margin: -2px -4px -2px 0; padding: 0; border: none; background: transparent; color: inherit; cursor: pointer; border-radius: var(--radius-sm); transition: background .15s; }
+    .alert .close:hover { background: var(--khc-surface-hover); }
+    .alert .close .icon { width: var(--size-icon-sm); height: var(--size-icon-sm); margin: 0; }
+
+/* ── Badge ─────────────────────────────────────────────────── */
+/* @anatomy
+   <span class="label">状态</span> <span class="badge b-done" data-evidence-sample="Done Badge">已完成</span> <span class="badge b-running" data-evidence-sample="Running Badge">运行中</span> <span class="badge b-queued" data-evidence-sample="Queued Badge">排队中</span> <span class="badge b-failed" data-evidence-sample="Failed Badge">失败</span> <span class="badge b-canceled" data-evidence-sample="Canceled Badg...
+*/
+/* Component definitions — extracted to components.css by deterministic script */
+.badge { display: inline-flex; align-items: center; padding: 2px 10px; font-size: 12px; font-weight: 500; line-height: 1.5; border-radius: 10px; white-space: nowrap; flex-shrink: 0; min-width: 28px; }
+.b-done { background: var(--khc-success-50); color: var(--color-success); }
+.b-running { background: var(--khc-primary-50); color: var(--color-primary); }
+.b-queued { background: var(--khc-neutral-100); color: var(--color-text-3); }
+.b-failed { background: var(--khc-danger-50); color: var(--color-danger); }
+.b-canceled { background: var(--khc-warning-50); color: var(--color-warning); }
+
+/* ── Button ────────────────────────────────────────────────── */
+/* @anatomy
+   <span class="label">主要</span><button class="btn btn-primary" type="button">保存</button><button class="btn btn-primary" type="button" disabled>保存</button>
+*/
+/* Component definitions — extracted to components.css by deterministic script */
+  .btn { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid transparent; border-radius: var(--radius-sm); height: 32px; padding: 6px 16px; font-family: var(--font-body); font-size: 13px; line-height: 1; white-space: nowrap; cursor: pointer; min-width: 32px; flex-shrink: 0; transition: background .15s, border-color .15s, filter .15s; }
+  .btn-primary { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
+  .btn-primary:not(:disabled):hover { filter: brightness(1.08); }
+  .btn-primary:not(:disabled):active { filter: brightness(.92); }
+  .btn-secondary { background: #fff; color: var(--color-text-2); border-color: var(--color-border); }
+  .btn-secondary:not(:disabled):hover { background: var(--color-bg-page); }
+  .btn-secondary:not(:disabled):active { filter: brightness(.96); }
+  .btn-danger { background: var(--color-danger); color: #fff; border-color: var(--color-danger); }
+  .btn-danger:not(:disabled):hover { filter: brightness(1.08); }
+  .btn-danger:not(:disabled):active { filter: brightness(.92); }
+  .btn-small { height: 28px; padding: 4px 10px; font-size: 12px; min-width: 28px; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* ── Card ──────────────────────────────────────────────────── */
+/* @anatomy
+   <span class="label">标准卡片</span>
+*/
+.card { background: var(--color-bg-card); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 20px 24px; box-shadow: var(--shadow-1); margin-bottom: var(--space-4); }
+.card-title { margin: 0 0 var(--space-3) 0; font-size: var(--font-size-h2); font-weight: var(--font-weight-h2); line-height: var(--line-height-h2); color: var(--color-text-1); }
+.card-body { font-size: var(--type-body); line-height: var(--line-height-body); color: var(--color-text-2); }
+.stat-card { background: var(--color-bg-card); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 16px 18px; box-shadow: var(--shadow-1); }
+.stat-label { display: block; font-size: var(--type-caption); color: var(--color-text-3); font-weight: var(--font-weight-caption); margin-bottom: var(--space-2); }
+.stat-value { display: block; font-size: 22px; font-weight: 700; color: var(--color-text-1); }
+
+/* ── Navigation ────────────────────────────────────────────── */
+/* @anatomy
+   <span class="label">默认</span> <header class="top-nav"> <div class="top-nav-brand"> <span class="top-nav-logo">K</span> <span class="top-nav-title">KHC Admin</span>
+*/
+.top-nav { display: flex; align-items: center; justify-content: space-between; height: 48px; padding: 0 20px; background: var(--color-bg-card); border-bottom: 1px solid var(--color-border); box-shadow: var(--shadow-1); position: sticky; top: 0; z-index: 100; box-sizing: border-box; flex: 1; min-width: 0; }
+.top-nav-brand { display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; }
+.top-nav-logo { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; background: linear-gradient(135deg, var(--color-primary), var(--khc-primary-700)); color: var(--khc-text-inverse); font-size: var(--font-size-h3); font-weight: var(--font-weight-h1); flex-shrink: 0; }
+.top-nav-title { font-size: var(--font-size-h3); font-weight: var(--font-weight-h3); color: var(--color-text-1); white-space: nowrap; }
+.top-nav-right { display: flex; align-items: center; gap: var(--space-4); flex-shrink: 0; }
+.top-nav-info { font-size: var(--type-body); color: var(--color-text-2); white-space: nowrap; }
+.top-nav-logout { display: inline-flex; align-items: center; height: var(--size-button-sm); min-width: var(--size-button-sm); padding: 0 var(--space-3); background: transparent; border: 1px solid var(--color-border); color: var(--color-text-2); font-size: var(--type-body); font-family: var(--font-body); cursor: pointer; white-space: nowrap; transition: background .15s, border-color .15s; }
+.top-nav-logout:hover { background: var(--khc-surface-hover); }
+
+/* ── Sidebar ───────────────────────────────────────────────── */
+/* @anatomy
+   <span class="label">默认</span><nav class="sidenav" data-evidence-sample="Default SideNav"><div class="sidenav-menu"><a class="sidenav-item active"><span class="nav-icon"><i data-lucide="layout-grid"></i></span><span>概览</span></a><a class="sidenav-item"><span class="nav-icon"><i data-lucide="settings"></i></span><span>基础配置</span></a><a class="sidenav-item"><span class="nav-icon"><i data-lucide="f...
+*/
+/* Component definitions — extracted to components.css by deterministic script */
+.sidenav { width: 220px; background: var(--color-bg-card); border-right: 1px solid var(--color-border); display: flex; flex-direction: column; flex-shrink: 0; box-sizing: border-box; }
+.sidenav-menu { display: flex; flex-direction: column; padding: var(--space-1) 0; }
+.sidenav-item { display: flex; align-items: center; gap: var(--space-2); padding: 10px 20px; font-size: 13px; line-height: 1.5; color: var(--color-text-2); text-decoration: none; white-space: nowrap; border-left: 2px solid transparent; box-sizing: border-box; cursor: pointer; transition: background .15s, color .15s; }
+.sidenav-item:hover { background: var(--khc-surface-hover); color: var(--color-text-1); }
+.sidenav-item.active { background: var(--khc-primary-50); color: var(--color-primary); border-left-color: var(--color-primary); }
+.sidenav-item .nav-icon { display: inline-flex; align-items: center; flex-shrink: 0; }
+.sidenav-item .nav-icon svg { width: var(--size-icon-sm); height: var(--size-icon-sm); }
+
+/* ── Table ─────────────────────────────────────────────────── */
+/* @anatomy
+   <span class="label">默认</span>
+*/
+/* Component definitions — extracted to components.css by deterministic script */
+  .tbl { width: 100%; border-collapse: collapse; background: var(--color-bg-card); font-size: 13px; }
+  .tbl th { background: var(--color-bg-page); color: var(--color-text-2); font-size: 12px; font-weight: 500; text-align: left; padding: 10px 12px; white-space: nowrap; }
+  .tbl td { padding: 10px 12px; color: var(--color-text-1); border-bottom: 1px solid var(--color-border); transition: background .15s; }
+  .tbl tbody tr:last-child td { border-bottom: none; }
+  .tbl tbody tr:hover td { background: var(--color-bg-page); }
+
+/* ── Tabs ──────────────────────────────────────────────────── */
+/* @anatomy
+   <span class="label">卡片式</span> <div class="tabs tabs-card" data-evidence-sample="Card Tabs" role="tablist"> <button class="tab active" role="tab" aria-selected="true">概览</button> <button class="tab" role="tab" aria-selected="false">数据</button> <button class="tab" role="tab" aria-selected="false">设置</button>
+*/
+/* Component definitions — extracted to components.css by deterministic script */
+    .tabs { display: inline-flex; align-items: center; }
+    .tab { border: none; background: transparent; color: var(--color-text-2); font-family: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; min-width: 48px; transition: background .15s, color .15s, box-shadow .15s; }
+    .tabs-card { background: var(--color-bg-card); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 4px; }
+    .tabs-card .tab { padding: 6px 16px; border-radius: var(--radius-md); }
+    .tabs-card .tab.active { background: var(--color-bg-card); color: var(--color-primary); box-shadow: var(--shadow-1); }
+    .tabs-card .tab:hover:not(.active) { color: var(--color-text-1); background: var(--khc-surface-hover); }
+    .tabs-pill { gap: 4px; }
+    .tabs-pill .tab { padding: 4px 12px; font-size: 12px; border-radius: 10px; }
+    .tabs-pill .tab.active { background: var(--khc-primary-50); color: var(--color-primary); }
+    .tabs-pill .tab:hover:not(.active) { background: var(--khc-surface-hover); color: var(--color-text-1); }
+    .tabs-line { border-bottom: 1px solid var(--color-border); }
+    .tabs-line .tab { padding: 8px 16px; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+    .tabs-line .tab.active { color: var(--color-primary); border-bottom-color: var(--color-primary); }
+    .tabs-line .tab:hover:not(.active) { color: var(--color-text-1); background: var(--khc-surface-hover); }
+
+/* ── Toolbar ───────────────────────────────────────────────── */
+/* @anatomy
+   <div class="toolbar"> <div class="toolbar-left"> <button class="toolbar-tab active" type="button">全部</button> <button class="toolbar-tab" type="button">进行中</button> <button class="toolbar-tab" type="button">已完成</button> <button class="toolbar-btn" type="button">新建订单</button>
+*/
+/* Component definitions — extracted to components.css by deterministic script */
+  .toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--space-3); padding: 10px 14px; background: var(--color-bg-card); border: 1px solid var(--color-border); border-radius: var(--radius-md); box-shadow: var(--shadow-1); margin-bottom: 16px; }
+  .toolbar-left { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+  .toolbar-right { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+  .toolbar-tab { display: inline-flex; align-items: center; height: 32px; padding: 0 12px; font-size: var(--font-size-body); color: var(--color-text-2); background: transparent; border: 1px solid transparent; border-radius: var(--radius-md); cursor: pointer; white-space: nowrap; transition: background .15s, border-color .15s; min-width: 32px; }
+  .toolbar-tab:hover { background: var(--khc-surface-hover); }
+  .toolbar-tab.active { color: var(--color-text-1); background: var(--color-bg-page); border-color: var(--color-border); }
+  .toolbar-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 14px; font-size: var(--font-size-body); color: var(--khc-text-inverse); background: var(--color-primary); border: 1px solid var(--color-primary); border-radius: var(--radius-md); cursor: pointer; white-space: nowrap; transition: background .15s, border-color .15s; min-width: 32px; }
+  .toolbar-btn:hover { filter: brightness(1.08); }
+  .toolbar-search { display: inline-flex; align-items: center; width: 200px; height: 32px; padding: 0 10px; font-size: var(--font-size-body); color: var(--color-text-1); background: var(--color-bg-page); border: 1px solid var(--color-border); border-radius: var(--radius-md); outline: none; }
+  .toolbar-search::placeholder { color: var(--color-text-3); }
+  .toolbar-icon { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; color: var(--color-text-2); background: transparent; border: 1px solid transparent; border-radius: var(--radius-md); cursor: pointer; transition: background .15s, border-color .15s; flex-shrink: 0; }
+  .toolbar-icon:hover { background: var(--khc-surface-hover); }

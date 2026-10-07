@@ -1,9 +1,61 @@
-# Git ignore file to prevent pushing secrets and local config
-.DS_Store
+# Dependency directories
 node_modules/
-.dev.vars
+.venv/
+.venv_local/
+__pycache__/
+*.pyc
+
+# Build and local test outputs
 .wrangler/
-caddy/
-caddy_khc/
-test_*.png
+.dev.vars
 package-lock.json
+test_*.png
+*.zip
+
+# OS & Editor files
+.DS_Store
+Thumbs.db
+.freebuff/
+
+# Secrets, API Keys & credentials (NEVER push to remote)
+*.env
+*.env.*
+caddy/.env
+scratch/*.env
+scratch/azure.env
+scratch/deploy_azure/.env
+scratch/deploy_azure/
+
+# Local sensitive runtime configs
+config.json
+caddy/mcp-server/config.json
+caddy/mcp-server/test_config.json
+
+# Private infrastructure & deployment documents
+*.local.md
+DEPLOYMENT_VM.local.md
+
+# SSH / TLS private keys & certificates (never commit)
+*.key
+*.pem
+Oracle_khc.key
+caddy/gcp.pem
+
+# Logs and runtime PID files
+*.log
+*.pid
+caddy/*.log
+caddy/*.pid
+caddy/mcp-server/*.log
+caddy/mcp-server/*.pid
+
+# Generated images persistence directory
+caddy/mcp-server/static/generated/
+static/generated/
+
+# Local python virtual envs in specific folders
+caddy/mcp-server/.venv/
+caddy/mcp-server/.venv_local/
+
+# Backups folder
+caddy/backups/

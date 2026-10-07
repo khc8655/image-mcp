@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KHC Image MCP 管理控制台</title>
+  <link rel="stylesheet" href="/static/colors_and_type.css">
+  <link rel="stylesheet" href="/static/core.css">
+  <link rel="stylesheet" href="/static/components.css">
+  <link rel="stylesheet" href="/static/admin.css">
+</head>
+<body>
+  <!-- include:icons -->
+
+  <!-- 顶部导航栏 -->
+  <header class="top-nav">
+    <div class="top-nav-brand">
+      <span class="top-nav-logo">K</span>
+      <span class="top-nav-title">KHC Image MCP 管理控制台</span>
+      <span class="badge b-done" style="margin-left:8px;">v3.0</span>
+    </div>
+    <div class="top-nav-right" id="navActions" style="display:none;">
+      <button class="btn btn-primary btn-small" type="button" onclick="saveAllConfig()" id="btnTopSave">
+        <svg class="icon"><use href="#icon-check"/></svg>
+        <span>保存配置</span>
+      </button>
+      <button class="top-nav-logout" type="button" onclick="logout()">退出</button>
+    </div>
+  </header>
+
+  <div class="toast-stack" id="toastStack"></div>
+
+  <!-- 初始化异常诊断捕获器 (防止由于网络/缓存中断导致白屏无提示) -->
+  <div id="initErrorView" style="display:none; max-width: 520px; margin: 60px auto; padding: 20px; background: #fff1f0; border: 1px solid #ffa39e; border-radius: 8px; color: #cf1322;">
+    <h3 style="margin: 0 0 10px; font-size: 16px;">控制台脚本初始化异常</h3>
+    <p id="initErrorMsg" style="font-size: 13px; line-height: 1.6; word-break: break-all; margin: 0 0 16px;"></p>
+    <div style="display: flex; gap: 10px;">
+      <button class="btn btn-primary btn-small" type="button" onclick="localStorage.clear(); location.reload(true);">清除缓存并硬刷新</button>
+      <button class="btn btn-secondary btn-small" type="button" onclick="location.href='/admin?t=' + Date.now();">重新载入</button>
+    </div>
+  </div>
+  <script>
+    window.addEventListener('error', function(e) {
+      var errEl = document.getElementById('initErrorView');
+      var msgEl = document.getElementById('initErrorMsg');
+      if (errEl && msgEl) {
+        errEl.style.display = 'block';
+        msgEl.textContent = (e.message || '脚本加载异常') + (e.filename ? ' [源: ' + e.filename + (e.lineno ? ':' + e.lineno : '') + ']' : '');
+      }
+    });
+  </script>
+
+  <!-- 登录视图 -->
+  <div id="loginView" class="login-wrap" style="display:none;">
+
+    <div class="card">
+      <div class="card-header-row">
+        <h2>管理员身份认证</h2>
+      </div>
+      <p class="card-subtitle">请输入与 MCP 客户端一致的 Admin Token 登录控制台。</p>
+      <div class="form-field">
+        <label>访问密钥 (Admin Token)</label>
+        <input type="password" id="loginTokenInput" placeholder="请输入鉴权 Token" onkeydown="if(event.key==='Enter')doLogin()">
+      </div>
+      <button class="btn btn-primary" type="button" style="width:100%;margin-top:12px;" onclick="doLogin()">登录控制台</button>
+    </div>
+  </div>
+
+  <!-- 主管理视图 -->
+  <main id="mainView" class="page-shell" style="display:none;">
+    <!-- 四大业务页签 -->
+    <div class="tabs tabs-line" role="tablist" style="margin-bottom:20px;width:100%;">
+      <button class="tab active" type="button" onclick="switchTab('generation', this)">生图管理</button>
+      <button class="tab" type="button" onclick="switchTab('vision', this)">识图与 OCR</button>
+      <button class="tab" type="button" onclick="switchTab('search', this)">搜图管理</button>
+      <button class="tab" type="button" onclick="switchTab('system', this)">系统配置</button>
+    </div>
+
+    <!-- 1. 生图模块 -->
+    <!-- include:tab_generation -->
+
+    <!-- 2. 识图与 OCR 模块 -->
+    <!-- include:tab_vision -->
+
+    <!-- 3. 搜图模块 -->
+    <!-- include:tab_search -->
+
+    <!-- 4. 系统配置模块 (公用底层资产) -->
+    <!-- include:tab_system -->
+  </main>
+
+  <!-- 弹窗微模块 -->
+  <!-- include:modals -->
+
+  <!-- 模块化前端主入口 -->
+  <script type="module" src="/static/js/app.js?v=2.9.0"></script>
+</body>
+</html>

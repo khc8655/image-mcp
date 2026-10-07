@@ -1,0 +1,181 @@
+/* @group-priority: primary, success, danger, warning, info */
+
+:root {
+  /* primary */
+  --khc-primary-50: #E6EEFF; /* AI-generated */
+  --khc-primary-100: #C5D7FF; /* AI-generated */
+  --khc-primary-200: #98B8FF; /* AI-generated */
+  --khc-primary-300: #6B99FF; /* AI-generated */
+  --khc-primary-400: #3F7AFF; /* AI-generated */
+  --khc-primary-500: #1664FF; /* AI-generated */ /* @primary */
+  --khc-primary-600: #0F54E0; /* AI-generated */
+  --khc-primary-700: #0B43B8; /* AI-generated */
+  --khc-primary-800: #083185; /* AI-generated */
+  --khc-primary-900: #06205C; /* AI-generated */
+
+  /* neutral */
+  --khc-neutral-50: #F8FAFC; /* AI-generated */
+  --khc-neutral-100: #F1F5F9; /* AI-generated */
+  --khc-neutral-200: #E2E8F0; /* AI-generated */
+  --khc-neutral-300: #CBD5E1; /* AI-generated */
+  --khc-neutral-400: #94A3B8; /* AI-generated */
+  --khc-neutral-500: #64748B; /* AI-generated */ /* @primary */
+  --khc-neutral-600: #475569; /* AI-generated */
+  --khc-neutral-700: #334155; /* AI-generated */
+  --khc-neutral-800: #1E293B; /* AI-generated */
+  --khc-neutral-900: #0F172A; /* AI-generated */
+
+  /* success */
+  --khc-success-50: #ECFDF5; /* AI-generated */
+  --khc-success-100: #D1FAE5; /* AI-generated */
+  --khc-success-200: #A7F3D0; /* AI-generated */
+  --khc-success-300: #6EE7B7; /* AI-generated */
+  --khc-success-400: #34D399; /* AI-generated */
+  --khc-success-500: #10B981; /* AI-generated */ /* @primary */
+  --khc-success-600: #059669; /* AI-generated */
+  --khc-success-700: #047857; /* AI-generated */
+  --khc-success-800: #065F46; /* AI-generated */
+  --khc-success-900: #064E3B; /* AI-generated */
+
+  /* warning */
+  --khc-warning-50: #FFFBEB; /* AI-generated */
+  --khc-warning-100: #FEF3C7; /* AI-generated */
+  --khc-warning-200: #FDE68A; /* AI-generated */
+  --khc-warning-300: #FCD34D; /* AI-generated */
+  --khc-warning-400: #FBBF24; /* AI-generated */
+  --khc-warning-500: #F59E0B; /* AI-generated */ /* @primary */
+  --khc-warning-600: #D97706; /* AI-generated */
+  --khc-warning-700: #B45309; /* AI-generated */
+  --khc-warning-800: #92400E; /* AI-generated */
+  --khc-warning-900: #78350F; /* AI-generated */
+
+  /* danger */
+  --khc-danger-50: #FEF2F2; /* AI-generated */
+  --khc-danger-100: #FEE2E2; /* AI-generated */
+  --khc-danger-200: #FECACA; /* AI-generated */
+  --khc-danger-300: #FCA5A5; /* AI-generated */
+  --khc-danger-400: #F87171; /* AI-generated */
+  --khc-danger-500: #EF4444; /* AI-generated */ /* @primary */
+  --khc-danger-600: #DC2626; /* AI-generated */
+  --khc-danger-700: #B91C1C; /* AI-generated */
+  --khc-danger-800: #991B1B; /* AI-generated */
+  --khc-danger-900: #7F1D1D; /* AI-generated */
+
+  /* info */
+  --khc-info-50: #ECFEFF; /* AI-generated */
+  --khc-info-100: #CFFAFE; /* AI-generated */
+  --khc-info-200: #A5F3FC; /* AI-generated */
+  --khc-info-300: #67E8F9; /* AI-generated */
+  --khc-info-400: #22D3EE; /* AI-generated */
+  --khc-info-500: #06B6D4; /* AI-generated */ /* @primary */
+  --khc-info-600: #0891B2; /* AI-generated */
+  --khc-info-700: #0E7490; /* AI-generated */
+  --khc-info-800: #155E75; /* AI-generated */
+  --khc-info-900: #164E63; /* AI-generated */
+
+  /* text */
+  --khc-text-1: var(--khc-neutral-900); /* AI-generated */
+  --khc-text-2: var(--khc-neutral-600); /* AI-generated */ /* @primary */
+  --khc-text-3: var(--khc-neutral-400); /* AI-generated */
+  --khc-text-inverse: #FFFFFF; /* AI-generated */
+
+  /* surface */
+  --khc-surface-page: #F8FAFC; /* AI-generated */
+  --khc-surface-card: #FFFFFF; /* AI-generated */ /* @primary */
+  --khc-surface-hover: var(--khc-neutral-100); /* AI-generated */
+
+  /* border */
+  --khc-border-1: var(--khc-neutral-200); /* AI-generated */ /* @primary */
+  --khc-border-2: var(--khc-neutral-300); /* AI-generated */
+
+  /* Typography */
+  --font-display: 'PingFang SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-body: 'PingFang SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'SF Mono', 'Roboto Mono', Consolas, monospace;
+  --font-size-display: 32px;
+  --font-size-h1: 24px;
+  --font-size-h2: 20px;
+  --font-size-h3: 16px;
+  --font-size-body: 14px;
+  --font-size-caption: 12px;
+  --font-size-mono: 13px;
+  --font-weight-display: 600;
+  --font-weight-h1: 600;
+  --font-weight-h2: 600;
+  --font-weight-h3: 500;
+  --font-weight-body: 400;
+  --font-weight-caption: 400;
+  --font-weight-mono: 400;
+  --line-height-display: 1.2;
+  --line-height-h1: 1.3;
+  --line-height-h2: 1.4;
+  --line-height-h3: 1.5;
+  --line-height-body: 1.5;
+  --line-height-caption: 1.5;
+  --line-height-mono: 1.6;
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  /* Sizing */
+  --size-icon-sm: 16px;
+  --size-icon-md: 20px;
+  --size-icon-lg: 24px;
+  --size-button-sm: 32px;
+  --size-button-md: 40px;
+  --size-input: 40px;
+  --size-button-lg: 48px;
+
+  /* Radius */
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+
+  /* Shadows */
+  --shadow-1: 0 1px 2px rgba(15,23,42,.04); /* Card */
+  --shadow-2: 0 2px 4px rgba(15,23,42,.06); /* Card Hover */
+  --shadow-3: 0 4px 8px rgba(15,23,42,.08); /* Float */
+  --shadow-4: 0 8px 16px rgba(15,23,42,.10); /* Modal */
+  --shadow-5: 0 12px 24px rgba(15,23,42,.12); /* Overlay */
+
+  /* Portable aliases */
+  --color-primary: var(--khc-primary-500);
+  --color-success: var(--khc-success-500);
+  --color-warning: var(--khc-warning-500);
+  --color-danger: var(--khc-danger-500);
+  --color-info: var(--khc-info-500);
+  --color-text-1: var(--khc-text-1);
+  --color-text-2: var(--khc-text-2);
+  --color-text-3: var(--khc-text-3);
+  --color-bg-page: var(--khc-surface-page);
+  --color-bg-card: var(--khc-surface-card);
+  --color-border: var(--khc-border-1);
+  --type-display: var(--font-size-display);
+  --type-h1: var(--font-size-h1);
+  --type-h2: var(--font-size-h2);
+  --type-body: var(--font-size-body);
+  --type-caption: var(--font-size-caption);
+  --type-mono: var(--font-size-mono);
+}
+
+.dark {
+  --khc-surface-page: #0F172A; /* AI-generated */
+  --khc-surface-card: #1E293B; /* AI-generated */
+  --khc-surface-hover: #334155; /* AI-generated */
+  --khc-text-1: #F1F5F9; /* AI-generated */
+  --khc-text-2: #94A3B8; /* AI-generated */
+  --khc-text-3: #64748B; /* AI-generated */
+  --khc-text-inverse: #0F172A; /* AI-generated */
+  --khc-border-1: #334155; /* AI-generated */
+  --khc-border-2: #475569; /* AI-generated */
+  --shadow-1: 0 1px 2px rgba(0,0,0,.30); /* Card */
+  --shadow-2: 0 2px 6px rgba(0,0,0,.35); /* Card Hover */
+}

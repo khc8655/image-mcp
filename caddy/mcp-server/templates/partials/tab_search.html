@@ -1,0 +1,73 @@
+<!-- 搜图管理 Tab -->
+<section id="tab-search" class="tab-section" style="display:none;">
+  <!-- 1. 搜图调度参数 -->
+  <div class="card">
+    <div class="card-header-row">
+      <h2>搜图引擎参数配置</h2>
+    </div>
+    <p class="card-subtitle">控制 <code>search_images</code> 全网图片搜索的检索源与以图搜图联动。</p>
+
+    <div class="form-grid-2">
+      <div class="form-field">
+        <label>首选文字搜图引擎</label>
+        <select id="cfg_search_engine">
+          <option value="duckduckgo">DuckDuckGo + Bing 双引擎高可用聚合 (免 Key 推荐)</option>
+          <option value="pexels">Pexels 高清无版权摄影图库 (需配置下方 API Key)</option>
+        </select>
+      </div>
+      <div class="form-field">
+        <label>单次返回图片最大张数 (Limit)</label>
+        <input type="number" id="cfg_search_limit" min="1" max="20" value="6">
+      </div>
+      <div class="form-field">
+        <label>Pexels API Key (可选商用高质量图源)</label>
+        <input type="password" id="cfg_pexels_key" placeholder="留空则自动使用免 Key 引擎">
+      </div>
+      <div class="form-field" style="justify-content:center;padding-top:20px;">
+        <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;">
+          <input type="checkbox" id="cfg_search_use_ocr">
+          <span>启用以图搜图联动内部 OCR 引擎抽取实体关键词</span>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. 在线体验区 (Playground) -->
+  <div class="card">
+    <div class="card-header-row">
+      <h2>搜图在线体验区 (Playground)</h2>
+      <button class="btn btn-primary btn-small" type="button" id="btnRunSearchTest" onclick="runSearchTest()">
+        <svg class="icon"><use href="#icon-search"/></svg>
+        <span>发起检索</span>
+      </button>
+    </div>
+    <p class="card-subtitle">输入关键词或图片链接，实时检验全网搜图的可用性与画质。</p>
+
+    <div class="form-grid-3">
+      <div class="form-field" style="grid-column:span 2;">
+        <label>搜索关键词 (Query)</label>
+        <input type="text" id="test_search_query" placeholder="如：赛博朋克霓虹街道、故宫雪景、现代极简建筑" onkeydown="if(event.key==='Enter')runSearchTest()">
+      </div>
+      <div class="form-field">
+        <label>检索数量</label>
+        <select id="test_search_limit">
+          <option value="4">4 张图片</option>
+          <option value="6" selected>6 张图片</option>
+          <option value="8">8 张图片</option>
+          <option value="12">12 张图片</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-field" style="margin-top:8px;">
+      <label>以图搜图参考图 (可选，支持图片公网 URL 或 Base64)</label>
+      <input type="text" id="test_search_image" placeholder="留空则进行纯文字搜图；填入图片将先调用内部 OCR 提取实体再检索">
+    </div>
+
+    <div id="searchTestLoading" style="display:none;padding:20px 0;text-align:center;color:var(--color-text-2);">
+      <span>正在全网检索高清图片，请稍候...</span>
+    </div>
+
+    <div id="searchTestResults" class="search-gallery"></div>
+  </div>
+</section>

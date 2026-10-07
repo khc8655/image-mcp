@@ -1,0 +1,67 @@
+<!-- 识图与 OCR Tab (与生图管理全对称规范) -->
+<section id="tab-vision" class="tab-section" style="display:none;">
+  <!-- 1. 识图调度策略 -->
+  <div class="card">
+    <div class="card-header-row">
+      <h2>识图与 OCR 调度策略</h2>
+    </div>
+    <p class="card-subtitle">
+      识图调度采用<strong>顺序优先级模式</strong>：默认调用列表排在第 1 位的多模态首选节点；发生异常或超时时，自动按序号向下执行故障切换。
+    </p>
+
+    <div class="form-grid-2">
+      <div class="form-field">
+        <label>识图响应超时时间 (秒)</label>
+        <input type="number" id="cfg_vis_timeout" min="10" max="180" value="45" title="超时主动熔断并切换下一备用节点">
+      </div>
+    </div>
+
+
+    <div class="form-grid-2" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--khc-border-subtle);">
+      <div class="form-field">
+        <label>默认识别等级 (Preset)</label>
+        <select id="cfg_vision_preset">
+          <option value="standard">standard — 标准多模态视觉理解与文字提取 (推荐默认)</option>
+          <option value="document">document — 高精文档、财务报表与 Markdown 表格还原</option>
+          <option value="gui">gui — 界面元素识别与归一化坐标定位 [ymin, xmin, ymax, xmax]</option>
+          <option value="fast">fast — 极速纯文本提取 (优先本地 RapidOCR，零 Token 消耗)</option>
+        </select>
+      </div>
+      <div class="form-field" style="justify-content:center;padding-top:20px;">
+        <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;">
+          <input type="checkbox" id="cfg_vision_rapidocr">
+          <span>启用本地 RapidOCR (ONNX) 极速引擎（当 preset=fast 时本地直提）</span>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. 活跃识图模型池 -->
+  <div class="card">
+    <div class="card-header-row">
+      <h2>识图活跃模型池 (Active Vision Models)</h2>
+      <button class="btn btn-primary btn-small" type="button" onclick="openBindModelModal('vision')">
+        <svg class="icon"><use href="#icon-plus"/></svg>
+        <span>+ 挂载识图模型</span>
+      </button>
+    </div>
+    <p class="card-subtitle">当前可用于多模态视觉分析与 OCR 的模型。排在第 1 位的为主力模型，遇到故障自动向下顺延故障切换（直接修改数字即可调整排序）。</p>
+
+
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th style="width:58px;text-align:center;"># 排序</th>
+          <th>模型 ID</th>
+          <th>厂商</th>
+          <th>偏好角色</th>
+          <th>状态</th>
+          <th style="text-align:right;">操作</th>
+        </tr>
+      </thead>
+      <tbody id="visionModelsTbody">
+        <tr><td colspan="6" class="muted" style="text-align:center;padding:24px;">加载中...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>

@@ -1,0 +1,47 @@
+{
+  "id": "sensenova",
+  "name": "SenseTime (商汤日日新)",
+  "version": "1.2.0",
+  "protocol": "openai_images",
+  "base_url": "https://token.sensenova.cn/v1",
+  "description": "商汤日日新大模型，支持 sensenova-u1 系列超高清超细致分辨率生图与多模态文档解析",
+  "image_models": [
+    {
+      "name": "sensenova-u1-fast",
+      "description": "日日新 U1 快速生图，超高清分辨率 (2048x2048 / 2752x1536)，出图速度快"
+    },
+    {
+      "name": "sensenova-u1",
+      "description": "日日新 U1 旗舰生图，细腻光影与复杂场景渲染"
+    }
+  ],
+  "vision_models": [
+    {
+      "name": "SenseChat-Vision",
+      "description": "商汤多模态图文与专业 OCR 视觉模型"
+    }
+  ],
+  "adapter_rules": {
+    "image_generation": {
+      "protocol": "openai_images",
+      "base_url": "https://token.sensenova.cn/v1",
+      "endpoint": "/images/generations",
+      "supports_edit": false,
+      "size_map": {
+        "1:1": "2048x2048",
+        "16:9": "2752x1536",
+        "9:16": "1536x2752",
+        "4:3": "2272x1824",
+        "3:4": "1824x2272",
+        "3:2": "2496x1664",
+        "2:3": "1664x2496",
+        "21:9": "3072x1344"
+      },
+      "response_b64_fields": ["b64_image", "b64_json", "base64"]
+    },
+    "vision": {
+      "protocol": "openai_compatible",
+      "base_url": "https://token.sensenova.cn/v1/chat/completions"
+    }
+  }
+}

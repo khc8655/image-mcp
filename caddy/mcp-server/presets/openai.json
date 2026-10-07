@@ -1,0 +1,44 @@
+{
+  "id": "openai",
+  "name": "OpenAI 官方",
+  "version": "1.2.0",
+  "protocol": "openai_images",
+  "base_url": "https://api.openai.com/v1",
+  "description": "OpenAI 官方 API，支持 DALL-E 3 高清构图生图与 GPT-4o 多模态视觉理解",
+  "image_models": [
+    {
+      "name": "dall-e-3",
+      "description": "DALL-E 3 旗舰生成模型，支持 1024x1024 / 1792x1024 / 1024x1792 高清质感"
+    }
+  ],
+  "vision_models": [
+    {
+      "name": "gpt-4o",
+      "description": "GPT-4o 顶尖多模态视觉理解与复杂场景识别"
+    },
+    {
+      "name": "gpt-4o-mini",
+      "description": "GPT-4o-mini 轻量快速视觉识别"
+    }
+  ],
+  "adapter_rules": {
+    "image_generation": {
+      "protocol": "openai_images",
+      "base_url": "https://api.openai.com/v1",
+      "endpoint": "/images/generations",
+      "supports_edit": false,
+      "size_map": {
+        "1:1": "1024x1024",
+        "16:9": "1792x1024",
+        "9:16": "1024x1792",
+        "4:3": "1024x1024",
+        "3:4": "1024x1024"
+      },
+      "response_b64_fields": ["b64_json", "url"]
+    },
+    "vision": {
+      "protocol": "openai_compatible",
+      "base_url": "https://api.openai.com/v1/chat/completions"
+    }
+  }
+}

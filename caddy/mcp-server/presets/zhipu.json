@@ -1,0 +1,44 @@
+{
+  "id": "zhipu",
+  "name": "Zhipu AI (智谱清言)",
+  "version": "1.2.0",
+  "protocol": "openai_images",
+  "base_url": "https://open.bigmodel.cn/api/paas/v4",
+  "description": "智谱开放平台，支持 CogView-3 系列高精中文语义绘图与 GLM-4V 多模态视觉",
+  "image_models": [
+    {
+      "name": "cogview-3-plus",
+      "description": "CogView-3-Plus 旗舰生图模型，精准中文语义理解与高精构图"
+    },
+    {
+      "name": "cogview-3-flash",
+      "description": "CogView-3-Flash 极速绘图模型，高性价比出图"
+    }
+  ],
+  "vision_models": [
+    {
+      "name": "glm-4v-plus",
+      "description": "GLM-4V-Plus 顶尖中文多模态图文与长文档解析"
+    }
+  ],
+  "adapter_rules": {
+    "image_generation": {
+      "protocol": "openai_images",
+      "base_url": "https://open.bigmodel.cn/api/paas/v4",
+      "endpoint": "/images/generations",
+      "supports_edit": false,
+      "size_map": {
+        "1:1": "1024x1024",
+        "16:9": "1440x720",
+        "9:16": "720x1440",
+        "4:3": "1280x960",
+        "3:4": "960x1280"
+      },
+      "response_b64_fields": ["b64_json", "url"]
+    },
+    "vision": {
+      "protocol": "openai_compatible",
+      "base_url": "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+    }
+  }
+}

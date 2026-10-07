@@ -1,0 +1,52 @@
+{
+  "id": "minimax",
+  "name": "MiniMax (海螺 AI)",
+  "version": "1.3.0",
+  "protocol": "minimax_image",
+  "base_url": "https://api.minimaxi.com/v1",
+  "description": "MiniMax 官方生图与多模态引擎，支持 image-01/live 极速出图、中文原生排版、人物主体参考图生图与 M3 视觉理解",
+  "image_models": [
+    {
+      "name": "image-01",
+      "description": "海螺旗舰生图模型，原生支持复杂中文语义、诗词排版、全宽高比与肖像人物主体一致性重绘"
+    },
+    {
+      "name": "image-01-live",
+      "description": "海螺实时动态出图模型，支持画风设置 (style) 与高动态构图"
+    }
+  ],
+  "vision_models": [
+    {
+      "name": "MiniMax-M3",
+      "description": "多模态通用旗舰模型（支持图文多模态深度理解、复杂图表分析与文档 OCR）"
+    }
+  ],
+  "adapter_rules": {
+    "image_generation": {
+      "protocol": "minimax_image",
+      "base_url": "https://api.minimaxi.com/v1",
+      "endpoint": "/image_generation",
+      "supports_edit": true,
+      "default_params": {
+        "response_format": "base64",
+        "prompt_optimizer": true,
+        "aigc_watermark": false
+      },
+      "edit_reference_field": "subject_reference",
+      "edit_reference_type": "character",
+      "response_path": "data.image_base64",
+      "allowed_aspect_ratios": ["1:1", "16:9", "4:3", "3:2", "2:3", "3:4", "9:16", "21:9"]
+    },
+    "vision": {
+      "protocol": "minimax_vision",
+      "base_url": "https://api.minimaxi.com/v1",
+      "endpoint": "/chat/completions",
+      "case_sensitive_models": {
+        "minimax-m3": "MiniMax-M3"
+      },
+      "supports_ocr": true,
+      "detail": "high",
+      "max_tokens": 4096
+    }
+  }
+}

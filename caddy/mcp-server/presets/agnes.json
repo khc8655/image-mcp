@@ -1,0 +1,47 @@
+{
+  "id": "agnes",
+  "name": "Agnes AI",
+  "version": "1.3.0",
+  "protocol": "agnes_image",
+  "base_url": "https://apihub.agnes-ai.com/v1",
+  "description": "Agnes AI 官方平台，支持 agnes-image-2.5-flash 超清文生图/图生图/多图合成与 agnes-3.0-flash 512K 旗舰多模态推理",
+  "image_models": [
+    {
+      "name": "agnes-image-2.5-flash",
+      "description": "Agnes AI 最新一代旗舰图像模型，支持文生图、图生图、多图合成，提供 1K~4K 灵活尺寸与高信息密度细节"
+    }
+  ],
+  "vision_models": [
+    {
+      "name": "agnes-3.0-flash",
+      "description": "Agnes 3.0 Flash 旗舰开源推理模型，原生多模态视觉理解与 512K 超长上下文"
+    },
+    {
+      "name": "agnes-2.5-flash",
+      "description": "Agnes 2.5 Flash 旗舰高速多模态模型，毫秒级响应与高并发视觉解析"
+    }
+  ],
+  "adapter_rules": {
+    "image_generation": {
+      "protocol": "agnes_image",
+      "base_url": "https://apihub.agnes-ai.com/v1",
+      "endpoint": "/images/generations",
+      "supports_edit": true,
+      "default_size": "2K",
+      "allowed_aspect_ratios": ["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "21:9"],
+      "default_params": {
+        "extra_body": {
+          "response_format": "b64_json"
+        }
+      }
+    },
+    "vision": {
+      "protocol": "agnes_vision",
+      "base_url": "https://apihub.agnes-ai.com/v1",
+      "endpoint": "/chat/completions",
+      "supports_ocr": true,
+      "detail": "high",
+      "max_tokens": 4096
+    }
+  }
+}

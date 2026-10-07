@@ -1,0 +1,41 @@
+{
+  "id": "siliconflow",
+  "name": "SiliconFlow (硅基流动)",
+  "version": "1.2.0",
+  "protocol": "openai_images",
+  "base_url": "https://api.siliconflow.cn/v1",
+  "description": "硅基流动高性能开源模型云端推理平台，支持 FLUX.1 系列与快手可图 Kolors 开源顶尖绘图模型",
+  "image_models": [
+    {
+      "name": "black-forest-labs/FLUX.1-schnell",
+      "description": "FLUX.1 极速版 (4 步推理)，高品质构图，超快响应"
+    },
+    {
+      "name": "black-forest-labs/FLUX.1-dev",
+      "description": "FLUX.1 开发者版 (28 步推理)，细节极其丰富，专业级光影"
+    },
+    {
+      "name": "Kwai-Kolors/Kolors",
+      "description": "快手可图 Kolors，原生中文文字渲染与汉字海报排版能力突出"
+    }
+  ],
+  "adapter_rules": {
+    "image_generation": {
+      "protocol": "openai_images",
+      "base_url": "https://api.siliconflow.cn/v1",
+      "endpoint": "/images/generations",
+      "supports_edit": false,
+      "size_map": {
+        "1:1": "1024x1024",
+        "16:9": "1024x576",
+        "9:16": "576x1024",
+        "4:3": "1024x768",
+        "3:4": "768x1024"
+      },
+      "response_b64_fields": ["b64_json", "b64_image", "url"],
+      "prompt_optimizer": {
+        "auto_translate_to_english": true
+      }
+    }
+  }
+}

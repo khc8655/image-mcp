@@ -1,0 +1,23 @@
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "google/gemini-3.6-flash",
+      "object": "model",
+      "created": 1720000000,
+      "owned_by": "google"
+    },
+    {
+      "id": "google/gemini-3.5-flash-lite",
+      "object": "model",
+      "created": 1720000000,
+      "owned_by": "google"
+    },
+    {
+      "id": "minimax/minimax-m3",
+      "object": "model",
+      "created": 1720000000,
+      "owned_by": "minimax"
+    }
+  ]
+}
