@@ -1,6 +1,8 @@
 import pytest
 
 import server
+import providers
+from core import resolve_image_to_base64
 from conftest import png_b64
 
 
@@ -66,7 +68,7 @@ async def test_all_fail_message_sanitized(upstream):
 @pytest.mark.asyncio
 async def test_edit_with_mask_routes_to_mask_capable(upstream):
     b64 = png_b64()
-    res = await server.edit_image(image=b64, prompt="x", mask=b64, count=2)
+    await server.edit_image(image=b64, prompt="x", mask=b64, count=2)
     call = upstream.calls[-1]
     assert call["provider_id"] == "google"
     assert call["mask_b64"] == b64 and call["count"] == 2
@@ -82,14 +84,14 @@ async def test_model_targeting_exact(upstream):
 async def test_local_path_rejected_in_remote_mode():
     server.mcp._http_client = object()
     with pytest.raises(ValueError, match="远程部署"):
-        await server.resolve_image_to_base64(None, "/etc/hosts.png")
+        await resolve_image_to_base64(None, "/etc/hosts.png")
 
 
 @pytest.mark.asyncio
 async def test_describe_gui_elements(monkeypatch):
     async def fake_vision(**kw):
         return '好的：[{"label":"登录","type":"button","box":[900, 100, 950, 1200]}]'
-    monkeypatch.setattr(server, "execute_vision_completion", fake_vision)
+    monkeypatch.setattr(providers, "execute_vision_completion", fake_vision)
     server.mcp._http_client = object()
     res = await server.describe_image(image=png_b64(), preset="gui")
     el = structured(res)["elements"][0]

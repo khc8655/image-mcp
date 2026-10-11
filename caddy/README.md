@@ -51,7 +51,7 @@
 :3000 {
     # 1. Web 控制台与静态资源路由 (强制全局禁用边缘与浏览器缓存，保证前端即改即见)
     @admin_routes {
-        path /admin /admin/* /static/* /api/*
+        path /admin /admin/* /static/* /api/* /files/*
     }
     handle @admin_routes {
         header Cache-Control "no-cache, no-store, must-revalidate"
@@ -79,20 +79,15 @@
         path /mcp /mcp/*
         not method OPTIONS
     }
-    @auth_mcp {
-        header Authorization "Bearer {env.CLIENT_AUTH_TOKEN}"
-    }
+    # Bearer 鉴权与按客户端限流在应用层 (security.py) 完成
     handle @mcp_path {
-        handle @auth_mcp {
-            header Access-Control-Allow-Origin "*"
-            header Access-Control-Expose-Headers "Mcp-Session-Id, Mcp-Protocol-Version"
-            reverse_proxy 127.0.0.1:{env.MCP_SERVER_PORT} {
-                flush_interval -1
-                header_down Cache-Control "no-cache, no-transform"
-                header_down X-Accel-Buffering "no"
-            }
+        header Access-Control-Allow-Origin "*"
+        header Access-Control-Expose-Headers "Mcp-Session-Id, Mcp-Protocol-Version"
+        reverse_proxy 127.0.0.1:{env.MCP_SERVER_PORT} {
+            flush_interval -1
+            header_down Cache-Control "no-cache, no-transform"
+            header_down X-Accel-Buffering "no"
         }
-        respond 401
     }
 
     handle {
@@ -135,25 +130,19 @@
 
 ### 5.2 推荐标准增量同步流程
 ```bash
-# 步骤 1: 同步 Python 核心程序与配置管理器
-scp -i <YOUR_SSH_KEY_PATH> -o StrictHostKeyChecking=no \
-  caddy/mcp-server/server.py \
-  caddy/mcp-server/config_manager.py \
-  "<USERNAME>@[<YOUR_SERVER_IPV6>]:/home/ubuntu/caddy/mcp-server/"
+# 同步整个服务目录（排除运行时数据、密钥配置、测试与脚本）
+rsync -avz -e "ssh -i <YOUR_SSH_KEY_PATH>" \
+  --exclude '.venv*' --exclude '__pycache__' --exclude 'config.json' \
+  --exclude 'data/' --exclude 'tests/' --exclude 'scripts/' \
+  caddy/mcp-server/ "<USERNAME>@[<YOUR_SERVER_IPV6>]:/home/ubuntu/caddy/mcp-server/"
+rsync -avz -e "ssh -i <YOUR_SSH_KEY_PATH>" caddy/Caddyfile "<USERNAME>@[<YOUR_SERVER_IPV6>]:/home/ubuntu/caddy/"
 
-# 步骤 2: 递归同步适配器预设库、HTML 模板与静态前端资源
-scp -i <YOUR_SSH_KEY_PATH> -o StrictHostKeyChecking=no -r \
-  caddy/mcp-server/presets \
-  caddy/mcp-server/templates \
-  caddy/mcp-server/static \
-  "<USERNAME>@[<YOUR_SERVER_IPV6>]:/home/ubuntu/caddy/mcp-server/"
+# 远程安装依赖并重启
+ssh -i <YOUR_SSH_KEY_PATH> <USERNAME>@<YOUR_SERVER_IPV6> \
+  "cd /home/ubuntu/caddy && .venv/bin/pip install -r mcp-server/requirements.txt && ./manage.sh restart"
 
-# 步骤 3: 远程触发重启
-ssh -i <YOUR_SSH_KEY_PATH> -o StrictHostKeyChecking=no \
-  <USERNAME>@<YOUR_SERVER_IPV6> "/home/ubuntu/caddy/manage.sh restart"
-
-# 步骤 4: 执行线上集成回归测试
-/Users/xk/Documents/mcp/.venv311/bin/python /Users/xk/Documents/vertex/scratch/verify_image_mcp.py
+# 线上集成回归（需真实 Key）
+python caddy/mcp-server/scripts/live/verify_image_mcp.py
 ```
 
 ---

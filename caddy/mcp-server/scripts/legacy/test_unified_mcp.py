@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import sys
-import os
 import base64
 import asyncio
 from pathlib import Path
@@ -13,7 +12,6 @@ import server
 import httpx
 
 # Mock image classes since mcp is disabled locally
-from server import Image
 
 # Helper to verify base64 decoding of mock images
 MOCK_B64_IMAGE = base64.b64encode(b"fake_image_bytes").decode("utf-8")
@@ -348,8 +346,8 @@ async def run_all_tests():
         await test_generate_video()
         await test_list_models()
         print("\n🎉 ALL TESTS COMPLETED SUCCESSFULLY!")
-    except AssertionError as e:
-        print(f"\n❌ TEST FAILURE: AssertionError", file=sys.stderr)
+    except AssertionError:
+        print("\n❌ TEST FAILURE: AssertionError", file=sys.stderr)
         import traceback
         traceback.print_exc()
         sys.exit(1)

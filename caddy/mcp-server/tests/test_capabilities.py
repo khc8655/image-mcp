@@ -1,12 +1,11 @@
-import base64
-import io
 
 import pytest
-from PIL import Image
 
 import server
+import providers
+from tools import vision as vision_tools, search as search_tools
 from cache import vision_cache, search_cache
-from conftest import png_b64, png_bytes
+from conftest import png_b64
 
 
 def structured(res):
@@ -43,7 +42,6 @@ async def test_transform_upscale_and_limits():
 
 @pytest.mark.asyncio
 async def test_transform_remove_bg_without_rembg_is_clear(monkeypatch):
-    import imaging
     import builtins
     real_import = builtins.__import__
 
@@ -63,7 +61,7 @@ async def test_vision_cache_hits(monkeypatch):
     async def fake_vision(**kw):
         calls.append(kw)
         return "结果"
-    monkeypatch.setattr(server, "execute_vision_completion", fake_vision)
+    monkeypatch.setattr(providers, "execute_vision_completion", fake_vision)
     img = png_b64()
     await server.describe_image(image=img, prompt="p", preset="standard")
     await server.describe_image(image=img, prompt="p", preset="standard")
@@ -80,8 +78,8 @@ async def test_document_grounding_adds_ocr_text(monkeypatch):
 
     async def fake_ocr(_):
         return "合计 1,234.56"
-    monkeypatch.setattr(server, "execute_vision_completion", fake_vision)
-    monkeypatch.setattr(server, "_local_ocr_text", fake_ocr)
+    monkeypatch.setattr(providers, "execute_vision_completion", fake_vision)
+    monkeypatch.setattr(vision_tools, "_local_ocr_text", fake_ocr)
     await server.describe_image(image=png_b64(), preset="document")
     assert "合计 1,234.56" in seen["prompt"]
 
@@ -132,7 +130,7 @@ async def test_search_cache(monkeypatch):
     async def fake_search(client, q, size, ar, limit):
         calls.append(q)
         return [{"title": "t", "image_url": "https://x/1.jpg", "source": "s"}]
-    monkeypatch.setattr(server, "_search_by_text", fake_search)
+    monkeypatch.setattr(search_tools, "_search_by_text", fake_search)
     await server.search_images(query="猫")
     await server.search_images(query="猫")
     assert calls == ["猫"]

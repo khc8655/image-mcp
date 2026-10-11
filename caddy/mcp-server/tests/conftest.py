@@ -62,6 +62,7 @@ class FakeUpstream:
 @pytest.fixture
 def upstream(monkeypatch):
     fake = FakeUpstream()
-    monkeypatch.setattr(server, "execute_image_generation", fake.generate)
+    import providers
+    monkeypatch.setattr(providers, "execute_image_generation", fake.generate)
     server.mcp._http_client = object()
     return fake
