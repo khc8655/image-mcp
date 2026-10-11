@@ -47,6 +47,8 @@ from pydantic import BaseModel, Field
 from config_manager import config_mgr, DEFAULT_IMAGE_ADAPTER_RULES
 import security
 import storage
+import imaging
+from cache import vision_cache, search_cache, make_key
 from security import sanitize_error
 
 # ---------------------------------------------------------------------------
@@ -272,7 +274,7 @@ class ImageHit(BaseModel):
 
 class SearchResult(BaseModel):
     query: str
-    mode: str = Field(description="text | reverse_keywords")
+    mode: str = Field(description="text | reverse_lens (Google Lens 视觉匹配) | reverse_keywords (识图关键词)")
     results: list[ImageHit]
 
 
@@ -926,6 +928,7 @@ async def edit_image(
         prompt: 编辑指令，例如“把背景换成海边日落”。
         mask: 可选，局部重绘蒙版（白色区域为重绘区），只会路由到支持 mask 的模型。
         其余参数同 generate_image。
+    裁剪、缩放、旋转、格式转换、去背景等确定性操作请用 transform_image，不消耗模型额度。
     """
     return await generate_image(
         prompt=prompt, action="edit", image=image, mask=mask, scene="none",
@@ -976,6 +979,18 @@ def parse_gui_elements(text: str) -> Optional[list[UIElement]]:
     return out
 
 
+async def _local_ocr_text(image_b64: str) -> str:
+    if not config_mgr.get("vision", "rapidocr_enabled", default=True):
+        return ""
+    try:
+        engine = get_rapidocr_engine()
+        result, _ = await asyncio.get_running_loop().run_in_executor(None, engine, base64.b64decode(image_b64))
+        return "\n".join(item[1] for item in (result or []))
+    except Exception as e:
+        logger.info(f"本地 OCR 校对文本不可用: {sanitize_error(e)}")
+        return ""
+
+
 async def _describe(
     client: httpx.AsyncClient, image_b64: str, prompt: str, preset: str, model: str, ctx=None
 ) -> VisionResult:
@@ -995,8 +1010,23 @@ async def _describe(
         except Exception as e:
             logger.warning(f"本地 RapidOCR 不可用，降级至云端多模态模型池: {sanitize_error(e)}")
 
+    cache_ttl = float(config_mgr.get("vision", "cache_ttl_seconds", default=3600) or 0)
+    cache_key = make_key("vision", image_b64, prompt, active_preset, model)
+    cached = vision_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     system_instruction = {"document": DOCUMENT_INSTRUCTION, "gui": GUI_INSTRUCTION}.get(active_preset, "")
     full_prompt = f"{system_instruction}\n\n用户要求: {prompt}".strip()
+
+    # document 预设：先用本地 OCR 抽取文字，作为校对参考交给多模态模型，提升数字与字符准确率
+    if active_preset == "document" and config_mgr.get("vision", "document_ocr_grounding", default=True):
+        ocr_text = await _local_ocr_text(image_b64)
+        if ocr_text:
+            full_prompt += (
+                "\n\n以下是本地 OCR 引擎识别出的原始文字（逐行，可能有错字但数字通常可靠）。"
+                "请以图片版面为准组织结构，用这些文字校对数字与专有名词：\n" + ocr_text[:6000]
+            )
 
     vision_models = [
         m for m in config_mgr.get("vision", "models", default=[])
@@ -1026,9 +1056,11 @@ async def _describe(
             )
             if res_text:
                 elements = parse_gui_elements(res_text) if active_preset == "gui" else None
-                return VisionResult(
+                result = VisionResult(
                     text=res_text, preset=active_preset, engine=tag, elements=elements, failed_attempts=failures,
                 )
+                vision_cache.set(cache_key, result, cache_ttl)
+                return result
         except asyncio.TimeoutError:
             failures.append(Attempt(target=tag, error=f"请求超时 ({timeout_sec:.0f}s)"))
             logger.warning(f"识图节点 {tag} 超时，故障转移")
@@ -1162,6 +1194,42 @@ async def _search_by_text(client: httpx.AsyncClient, actual_query: str, size: st
     return results[:limit]
 
 
+async def _public_image_url(client: httpx.AsyncClient, image: str) -> Optional[str]:
+    """Lens 需要公网可访问的图片 URL：传入 URL 直接用，否则暂存为签名链接（需配置 PUBLIC_BASE_URL）。"""
+    image = image.strip()
+    if image.startswith(("http://", "https://")):
+        await security.validate_url_safety(image)
+        return image
+    if not storage.public_base_url(config_mgr):
+        return None
+    b64 = await resolve_image_to_base64(client, image)
+    meta = storage.save_image(base64.b64decode(b64), detect_image_mime(b64))
+    return storage.signed_url(config_mgr, meta["rel_path"])
+
+
+async def _reverse_search_lens(client: httpx.AsyncClient, image_url: str, q: str, limit: int, api_key: str) -> list[ImageHit]:
+    params = {"engine": "google_lens", "url": image_url, "api_key": api_key, "type": "visual_matches"}
+    if q:
+        params["q"] = q
+    resp = await client.get("https://serpapi.com/search.json", params=params, timeout=40.0)
+    if resp.status_code != 200:
+        raise RuntimeError(f"SerpAPI {resp.status_code}: {resp.text[:200]}")
+    data = resp.json()
+    if data.get("error"):
+        raise RuntimeError(f"SerpAPI: {data['error']}")
+    hits = []
+    for m in data.get("visual_matches", [])[:limit]:
+        img = m.get("image") or m.get("thumbnail")
+        if not img:
+            continue
+        hits.append(ImageHit(
+            title=str(m.get("title", ""))[:200], image_url=img, thumbnail_url=m.get("thumbnail"),
+            page_url=m.get("link"), width=m.get("image_width"), height=m.get("image_height"),
+            source=m.get("source", "google_lens"),
+        ))
+    return hits
+
+
 @mcp.tool(annotations=_annotations(read_only=True, title="搜图"))
 async def search_images(
     query: str = "",
@@ -1171,7 +1239,9 @@ async def search_images(
     limit: Annotated[int, Field(ge=1, le=20)] = 6,
     ctx: Optional[Context] = None,
 ) -> Annotated[mcp_types.CallToolResult, SearchResult]:
-    """全网搜图。传 query 按文字搜；只传 image 时先识别图片关键词再按关键词搜相似主题图片。
+    """全网搜图。传 query 按文字搜；传 image 时做以图搜图：
+    配置了 SerpAPI Key 则用 Google Lens 找视觉相似/同款/出处（query 可作为补充限定词），
+    否则先识别图片关键词再按关键词搜相似主题图片。
 
     参数说明:
         query: 搜索关键词。
@@ -1185,6 +1255,20 @@ async def search_images(
 
     actual_query = query.strip()
     mode = "text"
+    serpapi_key = config_mgr.get("search", "serpapi_key", default="") or os.environ.get("SERPAPI_KEY", "")
+    if image and serpapi_key:
+        try:
+            image_url = await _public_image_url(client, image)
+            if image_url:
+                hits = await _reverse_search_lens(client, image_url, actual_query, limit, serpapi_key)
+                result = SearchResult(query=actual_query, mode="reverse_lens", results=hits)
+                if hits:
+                    lines = [f"以图搜图结果（Google Lens，{len(hits)} 条）:"]
+                    for n, h in enumerate(hits, 1):
+                        lines.append(f"{n}. {h.title} | {h.source}\n   {h.page_url or h.image_url}")
+                    return _tool_result("\n".join(lines), result)
+        except Exception as e:
+            logger.warning(f"Google Lens 以图搜图失败，回退关键词模式: {sanitize_error(e)}")
     if image and not actual_query:
         mode = "reverse_keywords"
         image_b64 = await resolve_image_to_base64(client, image)
@@ -1196,7 +1280,12 @@ async def search_images(
     if not actual_query:
         raise ValueError("请提供搜索关键词 (query) 或参考图片 (image)")
 
-    raw = await _search_by_text(client, actual_query, size, aspect_ratio, limit)
+    s_key = make_key("search", actual_query, size, aspect_ratio, limit)
+    raw = search_cache.get(s_key)
+    if raw is None:
+        raw = await _search_by_text(client, actual_query, size, aspect_ratio, limit)
+        if raw:
+            search_cache.set(s_key, raw, float(config_mgr.get("search", "cache_ttl_seconds", default=600) or 0))
     hits = [
         ImageHit(
             title=str(r.get("title") or actual_query)[:200],
@@ -1218,6 +1307,58 @@ async def search_images(
         dim = f"{h.width}x{h.height}" if h.width and h.height else "尺寸未知"
         lines.append(f"{n}. {h.title} | {dim} | {h.source}\n   {h.image_url}")
     return _tool_result("\n".join(lines), result)
+
+
+# ---------------------------------------------------------------------------
+# MCP 核心工具 4: 本地确定性修图（零额度）
+# ---------------------------------------------------------------------------
+class TransformResult(BaseModel):
+    image: GeneratedImage
+    applied: list[str] = Field(description="实际执行的操作序列")
+
+
+@mcp.tool(annotations=_annotations(read_only=False, open_world=False, idempotent=True, title="本地修图"))
+async def transform_image(
+    image: str,
+    crop: Optional[list[int]] = None,
+    rotate: int = 0,
+    flip: Literal["none", "horizontal", "vertical"] = "none",
+    width: Annotated[int, Field(ge=0, le=8192)] = 0,
+    height: Annotated[int, Field(ge=0, le=8192)] = 0,
+    max_side: Annotated[int, Field(ge=0, le=8192)] = 0,
+    upscale: Literal[1, 2, 4] = 1,
+    remove_background: bool = False,
+    format: Literal["png", "jpeg", "webp"] = "png",
+    quality: Annotated[int, Field(ge=1, le=100)] = 90,
+) -> Annotated[mcp_types.CallToolResult, TransformResult]:
+    """本地图像处理，不调用大模型、不消耗额度、结果可复现。按 裁剪→旋转→翻转→缩放→去背景→编码 顺序执行。
+
+    参数说明:
+        image: 公网 URL 或 Base64 / data URI。
+        crop: [ymin, xmin, ymax, xmax]，0~1000 归一化坐标（可直接用 describe_image gui 预设返回的 box）。
+        rotate: 顺时针旋转角度。
+        flip: 镜像翻转。
+        width / height: 目标尺寸，只给一个则按比例；max_side: 长边上限（仅缩小）。
+        upscale: 2 或 4 倍 Lanczos 放大（插值放大，非 AI 超分）。
+        remove_background: 抠图去背景（需服务端安装 rembg），输出透明 PNG。
+        format / quality: 输出格式与质量。
+    """
+    client: httpx.AsyncClient = getattr(mcp, "_http_client", None)
+    if not client:
+        raise RuntimeError("HTTP 客户端未启动")
+    raw = base64.b64decode(await resolve_image_to_base64(client, image))
+    out, mime, applied, _size = await asyncio.get_running_loop().run_in_executor(
+        None,
+        lambda: imaging.transform(
+            raw, crop=crop, rotate=rotate, flip=flip, width=width, height=height, max_side=max_side,
+            upscale=upscale, remove_background=remove_background, fmt=format, quality=quality,
+        ),
+    )
+    images, blocks = _build_generation_content([{"b64": base64.b64encode(out).decode(), "mime": mime}])
+    result = TransformResult(image=images[0], applied=applied)
+    im = images[0]
+    text = f"处理完成（{' → '.join(applied)}），输出 {im.width}x{im.height} {mime}。\n{im.url or im.filename}"
+    return _tool_result(text, result, blocks)
 
 
 # ---------------------------------------------------------------------------
