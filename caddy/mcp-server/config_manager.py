@@ -139,11 +139,15 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "fallback_enabled": True,
         "default_preset": "standard",  # fast | standard | document | gui
         "rapidocr_enabled": True,
+        "document_ocr_grounding": True,  # document 预设先跑本地 OCR，把文本作为校对参考交给多模态模型
+        "cache_ttl_seconds": 3600,
         "models": []
     },
     "search": {
         "default_text_engine": "duckduckgo",  # duckduckgo | bing | pexels
         "pexels_api_key": "",
+        "serpapi_key": "",          # 配置后启用 Google Lens 真·以图搜图
+        "cache_ttl_seconds": 600,
         "reverse_search_use_ocr": True,
         "max_results": 6
     }
@@ -551,9 +555,10 @@ class ConfigManager:
         # 2. 保护 search.pexels_api_key
         search_in = data_copy.get("search")
         if isinstance(search_in, dict):
-            pk = search_in.get("pexels_api_key", "")
-            if isinstance(pk, str) and "*" in pk:
-                search_in["pexels_api_key"] = self.get("search", "pexels_api_key", default="")
+            for fld in ("pexels_api_key", "serpapi_key"):
+                pk = search_in.get(fld, "")
+                if isinstance(pk, str) and "*" in pk:
+                    search_in[fld] = self.get("search", fld, default="")
 
         # 3. 保护 providers 中的 keys 明文
         provs_in = data_copy.get("providers")
@@ -612,8 +617,10 @@ class ConfigManager:
 
         # 脱敏 Pexels API Key
         search = safe_copy.get("search", {})
-        if isinstance(search, dict) and search.get("pexels_api_key"):
-            search["pexels_api_key"] = _mask_secret(search["pexels_api_key"])
+        if isinstance(search, dict):
+            for fld in ("pexels_api_key", "serpapi_key"):
+                if search.get(fld):
+                    search[fld] = _mask_secret(search[fld])
 
         # 脱敏本地存储的各供应商 Keys，并注入双支柱模型及能力标志
         provs = safe_copy.get("providers", {})
