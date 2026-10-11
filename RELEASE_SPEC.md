@@ -23,7 +23,7 @@
 ```mermaid
 graph TD
     PR["提交代码 / PR"] --> G1["L1: 后端代码规范与静态检查<br/>(ruff check . 零报错)"]
-    G1 --> G2["L2: 后端单元与协议契约测试<br/>(pytest 全量通过 35/35)"]
+    G1 --> G2["L2: 后端单元与协议契约测试<br/>(pytest 全量通过 36/36)"]
     G2 --> G3["L3: 外部端与前端 DOM 冒烟<br/>(JS 符号绑定 / HTML 平衡 / 磁盘管理 UI / stdio 握手)"]
     G3 --> G4["L4: 自动化 CI 与多版本容器门禁<br/>(Python 3.11/3.12 矩阵 / Docker 非 root 构建)"]
     G4 --> Tag["打 Git Tag 并发布 Release"]
@@ -50,7 +50,7 @@ ruff check .
 ```bash
 pytest -v
 ```
-**强制通过项清单 (当前 35 项测试)**：
+**强制通过项清单 (当前 36 项测试)**：
 1. **MCP 2.0.0 协议规范**：
    - `tools/list` 输出符合 JSON Schema，带有 `outputSchema` 与 `readOnlyHint`；
    - 工具入参采用严谨的 `Literal` 枚举；
