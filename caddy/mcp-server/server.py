@@ -285,6 +285,19 @@ async def resolve_image_to_base64(client: httpx.AsyncClient, image_str: str) -> 
     return image_str
 
 
+_rapidocr_engine = None
+
+
+def get_rapidocr_engine():
+    """懒加载并复用 RapidOCR 实例（模型加载耗时数百毫秒，避免每次调用重复初始化）。"""
+    global _rapidocr_engine
+    if _rapidocr_engine is None:
+        from rapidocr_onnxruntime import RapidOCR
+        _rapidocr_engine = RapidOCR()
+        logger.info("本地 RapidOCR 引擎已加载")
+    return _rapidocr_engine
+
+
 def to_mcp_images(raw_images: list[dict]) -> list[Image]:
     return [
         Image(data=base64.b64decode(img["b64"]), format=img.get("mime", "image/png").split("/")[-1])
@@ -686,9 +699,10 @@ async def execute_vision_completion(
 @mcp.tool()
 async def generate_image(
     prompt: str,
-    aspect_ratio: str = "1:1",
+    aspect_ratio: str = "auto",
     action: str = "generate",
     image: str = "",
+    mask: str = "",
     scene: str = "auto",
     resolution: str = "auto",
     negative_prompt: str = "",
@@ -703,9 +717,10 @@ async def generate_image(
 
     参数说明:
         prompt: 画面意图描述词。
-        aspect_ratio: 比例，支持 10 种比例："1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "4:5", "5:4", "21:9"。默认 "1:1"。
+        aspect_ratio: 比例，支持 "auto"(默认，跟随场景模板/后台配置，均未配置时为 1:1) 及 10 种比例："1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "4:5", "5:4", "21:9"。显式传入的比例不会被覆盖。
         action: 操作类型，"generate"(文生图) 或 "edit"(图生图)。默认 "generate"。
         image: 参考图（仅在 action="edit" 时需要），支持公网 URL、本地文件绝对路径或 Base64。
+        mask: 可选，局部重绘蒙版（仅 action="edit" 时生效），格式同 image。
         scene: 办公/工作专业场景预设模板。可选值：
                - "auto": 默认跟随后台配置，若未配置则保持原始输入；
                - "infra_scene": 信息化全景场景图（数据中心/智慧园区/政务云/工业互联网 2.5D 高清示意图）；
@@ -741,7 +756,7 @@ async def generate_image(
 
     final_prompt = prompt.strip()
     final_negative = negative_prompt.strip()
-    target_aspect = aspect_ratio
+    target_aspect = (aspect_ratio or "auto").strip()
     target_res = resolution
 
     if active_scene in SCENE_PRESETS:
@@ -750,14 +765,18 @@ async def generate_image(
         final_prompt = f"{sc['prompt_prefix']}{final_prompt}{sc['prompt_suffix']}"
         if sc.get("negative_prompt"):
             final_negative = f"{sc['negative_prompt']}, {final_negative}" if final_negative else sc["negative_prompt"]
-        if target_aspect == "1:1" and sc.get("default_aspect"):
+        if target_aspect == "auto" and sc.get("default_aspect"):
             target_aspect = sc["default_aspect"]
         if (target_res == "auto" or not target_res) and sc.get("default_resolution"):
             target_res = sc["default_resolution"]
 
     # 全局默认参数回退
-    if target_aspect == "1:1":
-        cfg_aspect = config_mgr.get("generation", "default_aspect", default="")
+    if target_aspect == "auto":
+        # 兼容 Web 控制台写入的 default_aspect_ratio 与旧字段 default_aspect
+        cfg_aspect = (
+            config_mgr.get("generation", "default_aspect_ratio", default="")
+            or config_mgr.get("generation", "default_aspect", default="")
+        )
         if cfg_aspect and cfg_aspect in ASPECT_TO_SIZE:
             target_aspect = cfg_aspect
     if target_res == "auto" or not target_res:
@@ -768,8 +787,11 @@ async def generate_image(
     target_aspect = target_aspect if target_aspect in ASPECT_TO_SIZE else "1:1"
 
     image_b64 = ""
+    mask_b64 = ""
     if action == "edit" and image:
         image_b64 = await resolve_image_to_base64(client, image)
+        if mask:
+            mask_b64 = await resolve_image_to_base64(client, mask)
 
     # 2. 候选排序：若调用方显式指定了 model 或 provider，则将匹配模型提升至第 1 位
     target = (model or provider).strip().lower()
@@ -795,6 +817,9 @@ async def generate_image(
         rules = config_mgr.get_image_adapter_rules(cand["provider"])
         if action == "edit" and not rules.get("supports_edit", True):
             continue
+        if mask_b64 and not rules.get("supports_mask", cand["provider"] == "google"):
+            failures[f"{cand['provider']}/{cand['model']}"] = "不支持 mask 局部重绘，已跳过"
+            continue
         tag = f"{cand['provider']}/{cand['model']}"
         try:
             raw = await asyncio.wait_for(
@@ -807,6 +832,7 @@ async def generate_image(
                     aspect_ratio=target_aspect,
                     action=action,
                     image_b64=image_b64,
+                    mask_b64=mask_b64,
                     resolution=target_res,
                     seed=seed,
                     negative_prompt=final_negative,
@@ -841,18 +867,29 @@ async def edit_image(
     prompt: str,
     mask: str = "",
     scene: str = "auto",
-    aspect_ratio: str = "1:1",
+    aspect_ratio: str = "auto",
     resolution: str = "auto",
     negative_prompt: str = "",
     seed: int = -1,
+    count: int = 1,
     model: str = "",
     provider: str = ""
 ) -> list:
-    """对已有图像进行编辑、重绘或主体参考图生图（快速入口）。"""
+    """对已有图像进行编辑、重绘或主体参考图生图（快速入口）。
+
+    参数说明:
+        image: 待编辑原图，支持公网 URL、本地文件绝对路径或 Base64。
+        prompt: 编辑指令。
+        mask: 可选，局部重绘蒙版。仅路由到声明支持 mask 的模型（当前默认 Google）。
+        count: 生成张数 (默认为 1)。
+        其余参数同 generate_image。
+    """
     return await generate_image(
         prompt=prompt,
         action="edit",
         image=image,
+        mask=mask,
+        count=count,
         scene=scene,
         aspect_ratio=aspect_ratio,
         resolution=resolution,
@@ -895,10 +932,10 @@ async def describe_image(
     # 等级 1: fast - 本地极速纯文本 (RapidOCR)
     if active_preset == "fast" and config_mgr.get("vision", "rapidocr_enabled", default=True):
         try:
-            from rapidocr_onnxruntime import RapidOCR
-            ocr_engine = RapidOCR()
+            ocr_engine = get_rapidocr_engine()
             raw_bytes = base64.b64decode(image_b64)
-            result, _ = ocr_engine(raw_bytes)
+            # ONNX 推理为同步 CPU 计算，放入线程池避免阻塞事件循环
+            result, _ = await asyncio.get_running_loop().run_in_executor(None, ocr_engine, raw_bytes)
             if result:
                 lines = [f"- {item[1]} (置信度: {item[2]:.2f})" for item in result]
                 return "### 极速 OCR 提取结果 (本地 RapidOCR 引擎):\n\n" + "\n".join(lines)
@@ -1000,7 +1037,10 @@ async def search_images(
 
     # 引擎 1: DuckDuckGo Images
     try:
-        from duckduckgo_search import DDGS
+        try:
+            from ddgs import DDGS  # duckduckgo_search 已更名为 ddgs
+        except ImportError:
+            from duckduckgo_search import DDGS
         size_filter = size if size in ["large", "wallpaper"] else None
         layout_filter = aspect_ratio if aspect_ratio in ["square", "wide", "tall"] else None
 
@@ -1008,7 +1048,7 @@ async def search_images(
         def _ddg_search():
             with DDGS() as ddgs:
                 return list(ddgs.images(
-                    keywords=actual_query,
+                    actual_query,
                     max_results=limit,
                     size=size_filter,
                     layout=layout_filter
@@ -1165,7 +1205,7 @@ async def list_models() -> dict:
         ],
         "current_generation_mode": cfg.get("generation", {}).get("default_mode", "sequential"),
         "generation_defaults": {
-            "aspect_ratio": cfg.get("generation", {}).get("default_aspect", "1:1"),
+            "aspect_ratio": cfg.get("generation", {}).get("default_aspect_ratio") or cfg.get("generation", {}).get("default_aspect", "1:1"),
             "resolution": cfg.get("generation", {}).get("default_resolution", "auto"),
             "scene": cfg.get("generation", {}).get("default_scene", "none"),
         },
