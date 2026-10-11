@@ -1,6 +1,6 @@
 // 挂载与编辑模型弹窗微模块 (极简纯点选与全生命周期运维架构)
-import { esc, showToast, openModal, closeModal } from './common.js?v=2.9.0';
-import { api } from './api.js?v=2.9.0';
+import { esc, showToast, openModal, closeModal } from './common.js?v=3.1.0';
+import { api } from './api.js?v=3.1.0';
 
 let currentManifest = null;
 let currentPresets = null;

@@ -13,7 +13,7 @@ from pathlib import Path
 
 from starlette.responses import JSONResponse, Response, HTMLResponse
 
-from core import mcp, logger, SERVER_START_TIME, KNOWN_PROVIDER_IMAGE_MODELS
+from core import mcp, logger, SERVER_START_TIME, KNOWN_PROVIDER_IMAGE_MODELS, APP_VERSION
 from providers import resolve_local_provider_and_key
 from tools.search import search_images
 
@@ -54,9 +54,16 @@ async def admin_page(request) -> Response:
                 html_content = html_content.replace(placeholder, p_file.read_text(encoding="utf-8"))
 
     # 动态插入版本号破坏 EdgeOne CDN 与浏览器旧缓存
-    v_tag = f"?v=2.9.0.{int(SERVER_START_TIME)}"
+    v_tag = f"?v={APP_VERSION}.{int(SERVER_START_TIME)}"
     html_content = re.sub(r'/static/admin\.css(\?v=[^\s"\'<>]+)?', f'/static/admin.css{v_tag}', html_content)
     html_content = re.sub(r'/static/js/app\.js(\?v=[^\s"\'<>]+)?', f'/static/js/app.js{v_tag}', html_content)
+    # 动态渲染顶部导航栏版本号 Badge
+    html_content = re.sub(
+        r'<span class="badge b-done"[^>]*>v[0-9.]+</span>',
+        f'<span class="badge b-done" style="margin-left:8px;" id="appVersionBadge">v{APP_VERSION}</span>',
+        html_content
+    )
+
 
     return HTMLResponse(content=html_content, headers={
         "Cache-Control": "no-cache, no-store, must-revalidate",

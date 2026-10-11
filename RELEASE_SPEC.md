@@ -72,16 +72,19 @@ pytest -v
 
 ### 门禁三：外部端与前端 DOM / 符号门禁 (Frontend & External L3 Gate)
 
-1. **前端静态符号与死引用排查**：
+1. **前端版本标识与缓存随动 (Version Badge & Cache Busting)**：
+   - **顶部导航栏 Badge 版本号**必须与发版版本绝对一致（`templates/admin.html`、`core.APP_VERSION` 与 `list_models()` 保持单一度量衡），严禁遗留陈旧硬编码版本号导致用户无法确认升级状态；
+   - **静态资源导入标签**（`?v=...`）必须随版本号递增，并在服务端 `admin_page` 动态注入带有服务启动时间戳的破坏缓存参数，确保 EdgeOne CDN 与浏览器端破除旧静态缓存。
+2. **前端静态符号与死引用排查**：
    - `static/js/` 下所有微模块中的 `window.*` 导出与 HTML 调用一一对应；
    - 严禁调用未定义或遗漏的函数（杜绝运行时 `TypeError`）。
-2. **HTML 结构与 DOM 平衡性**：
+3. **HTML 结构与 DOM 平衡性**：
    - `templates/` 下的所有组件卡片与网格容器必须闭合完整；
    - 动态插入 `?v=...` 破除缓存策略必须生效。
-3. **Web 控制台核心交互冒烟**：
+4. **Web 控制台核心交互冒烟**：
    - 控制台登录认证与 Token 校验；
    - 「图片存储与磁盘管理」卡片容量展示、按日分布渲染以及二次确认清理。
-4. **外部 Client 契约冒烟**：
+5. **外部 Client 契约冒烟**：
    - **Stdio 模式**：`python server.py --stdio` 启动，发送 `tools/list` 秒级握手；
    - **HTTP SSE 模式**：携带 Client Token 调用返回 `resource_link` 签名链接与 384px 缩略图；
    - **主流 Agent**：在 Claude Code、Cursor 等客户端上配置后可正常调用生图与修图。
@@ -100,8 +103,11 @@ pytest -v
 
 ## 二、发版操作标准流程 (Release SOP)
 
-1. **版本更新**：
+1. **版本更新 (单一真实源)**：
+   - 更新 `core.py` 中的 `APP_VERSION`；
    - 更新 `pyproject.toml` 中的 `version`；
+   - 更新 `templates/admin.html` 顶部 Badge 中的版本号；
+   - 更新 `static/js/*.js` 中 ESM 模块互相 import 的 `?v=X.X.X` 后缀；
    - 更新 `tools/misc.py` 中 `list_models()` 返回的版本号；
    - 更新 `README.md` 记录变更内容。
 2. **门禁验收**：
@@ -116,6 +122,10 @@ pytest -v
    ```
 5. **发布 GitHub Release**：
    - 在 GitHub Releases 页面基于 tag 生成发布记录，附带变更日志。
+6. **云端生产环境热更与线上核验**：
+   - 同步至云端生产环境并重启；
+   - **访问线上控制台并检查顶部导航栏版本号 Badge**，确认与发版版本号完全吻合，杜绝缓存残留与未升级假象。
+
 
 ---
 

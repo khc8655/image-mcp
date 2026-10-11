@@ -7,7 +7,7 @@ from config_manager import config_mgr
 
 import providers
 from core import (
-    mcp, logger, SCENE_PRESETS, _annotations,
+    mcp, logger, SCENE_PRESETS, _annotations, APP_VERSION,
 )
 
 
@@ -66,7 +66,7 @@ async def list_models() -> dict:
     provs = cfg.get("providers", {})
     return {
         "service": "KHC Image MCP Suite",
-        "version": "3.1.0",
+        "version": APP_VERSION,
 
         "local_providers": [
             {

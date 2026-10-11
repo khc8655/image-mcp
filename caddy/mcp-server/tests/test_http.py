@@ -93,3 +93,11 @@ def test_storage_api(client):
     assert clean_data["ok"] is True
     assert clean_data["deleted_count"] >= 0
 
+
+def test_admin_page_renders_current_version(client):
+    r = client.get("/admin")
+    assert r.status_code == 200
+    assert "v3.1.0" in r.text
+    assert "/static/js/app.js?v=3.1.0" in r.text
+
+
