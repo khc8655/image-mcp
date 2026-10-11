@@ -36,6 +36,7 @@ from core import mcp, logger
 import tools  # noqa: F401  注册全部 MCP 工具
 from admin import (
     admin_page, get_config_api, post_config_api, get_presets_api, reload_presets_api, search_test_api,
+    get_storage_info_api, post_storage_clean_api,
     vault_test_api, vault_manifest_api, vault_fetch_key_api, vault_sync_api, vault_probe_models_api,
 )
 
@@ -121,6 +122,8 @@ def create_app():
         Route("/api/presets", endpoint=get_presets_api, methods=["GET"]),
         Route("/api/presets/reload", endpoint=reload_presets_api, methods=["POST"]),
         Route("/api/search/test", endpoint=search_test_api, methods=["POST"]),
+        Route("/api/storage/info", endpoint=get_storage_info_api, methods=["GET"]),
+        Route("/api/storage/clean", endpoint=post_storage_clean_api, methods=["POST"]),
         Route("/api/vault/test", endpoint=vault_test_api, methods=["POST"]),
         Route("/api/vault/manifest", endpoint=vault_manifest_api, methods=["POST"]),
         Route("/api/vault/fetch-key", endpoint=vault_fetch_key_api, methods=["POST"]),

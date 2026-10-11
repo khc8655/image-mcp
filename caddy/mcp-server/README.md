@@ -70,9 +70,9 @@ caddy/mcp-server/
 ├── core.py                   # [共享] MCP 实例、常量/场景模板、图像输入解析、输出模型、通用工具
 ├── providers.py              # [上游适配] adapter_rules 驱动的生图/识图执行器
 ├── tools/                    # [MCP 工具] generation / vision / search / transform / misc
-├── admin.py                  # [控制台 API] 配置、Vault 同步、Presets 热重载、搜图测试
+├── admin.py                  # [控制台 API] 配置、Vault 同步、Presets 热重载、搜图测试、存储空间统计与一键清理
 ├── security.py               # [安全] 客户端鉴权+限流、签名 URL、本地路径策略、SSRF、错误脱敏
-├── storage.py                # [存储] 生图落盘、签名下载、缩略图、过期清理
+├── storage.py                # [存储] 生图落盘、签名下载、缩略图、过期清理、磁盘容量统计与释放
 ├── imaging.py                # [本地修图] 裁剪/旋转/缩放/去背景/格式转换
 ├── cache.py                  # [缓存] 识图与搜图 TTL 缓存
 ├── tests/                    # [测试] pytest 套件（CI 运行）
@@ -92,7 +92,7 @@ caddy/mcp-server/
 ├── templates/                # [服务端渲染模板] 基于标准 HTML 声明式拼装，零第三方依赖
 │   ├── admin.html            # 控制台外壳骨架 (~90 行)
 │   └── partials/             # 业务微模块片段 (各 30~70 行)
-│       ├── tab_generation.html  # 生图管理 Tab (超时配置、顺序调度说明、活跃模型池)
+│       ├── tab_generation.html  # 生图管理 Tab (超时配置、顺序调度说明、活跃模型池、存储与磁盘空间监控)
 │       ├── tab_vision.html      # 识图与 OCR Tab (超时配置、Preset 等级、模型池)
 │       ├── tab_search.html      # 搜图管理 Tab (引擎配置、Playground 测试控制台)
 │       ├── tab_system.html      # 系统配置 Tab (EdgeOne 中枢一键同步、规则热重载)
@@ -107,7 +107,8 @@ caddy/mcp-server/
 │       ├── app.js            # 主入口协调器，初始化、登录鉴权、全局函数挂载至 window
 │       ├── api.js            # 封装 Fetch 请求、全局 Token 自动注入与统一错误处理
 │       ├── common.js         # Toast 通知系统、Tab 切换逻辑、Modal 弹窗显隐
-│       ├── tab_generation.js # 生图业务交互、模型池渲染、行内切 Key/角色、数字重排
+│       ├── tab_generation.js # 生图业务交互、模型池渲染、行内切 Key/角色、数字重排、存储空间监控与清理
+
 │       ├── tab_vision.js     # 识图业务交互、模型池渲染、行内切 Key/角色、数字重排
 │       ├── tab_search.js     # 搜图参数配置与在线检索 Playground
 │       ├── tab_system.js     # 凭据中枢连通测试、一键全量凭据同步、热重载适配规则

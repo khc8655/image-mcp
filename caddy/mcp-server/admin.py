@@ -6,6 +6,8 @@ import httpx
 
 from config_manager import config_mgr
 from security import sanitize_error
+import storage
+
 
 from pathlib import Path
 
@@ -489,3 +491,26 @@ async def search_test_api(request) -> Response:
         return JSONResponse({"ok": True, "markdown": md, "data": data})
     except Exception as e:
         return JSONResponse({"ok": False, "error": sanitize_error(e)}, status_code=400)
+
+
+async def get_storage_info_api(request) -> Response:
+    """获取生图持久化存储统计（图片数、大小、按日分布）"""
+    if not require_admin_token(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    try:
+        stats = storage.get_storage_stats()
+        return JSONResponse({"ok": True, **stats})
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": sanitize_error(e)}, status_code=500)
+
+
+async def post_storage_clean_api(request) -> Response:
+    """清空服务器上所有已生成的图片缓存"""
+    if not require_admin_token(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    try:
+        res = storage.clean_storage()
+        return JSONResponse(res)
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": sanitize_error(e)}, status_code=500)
+

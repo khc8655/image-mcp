@@ -72,3 +72,24 @@ def test_admin_api_rejects_client_token(client):
     assert r.status_code == 401
     r = client.get("/api/config", headers={"Authorization": "Bearer admin-token-abcdef"})
     assert r.status_code == 200
+
+
+def test_storage_api(client):
+    # client token is rejected
+    r = client.get("/api/storage/info", headers={"Authorization": "Bearer client-token-123456"})
+    assert r.status_code == 401
+    # admin token gets storage info
+    r = client.get("/api/storage/info", headers={"Authorization": "Bearer admin-token-abcdef"})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["ok"] is True
+    assert "total_images" in data
+    assert "total_size_bytes" in data
+
+    # admin clean storage
+    r = client.post("/api/storage/clean", headers={"Authorization": "Bearer admin-token-abcdef"})
+    assert r.status_code == 200
+    clean_data = r.json()
+    assert clean_data["ok"] is True
+    assert clean_data["deleted_count"] >= 0
+

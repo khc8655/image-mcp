@@ -95,8 +95,18 @@ SCENE_PRESETS = {
         "prompt_prefix": "A unified set of 9 modern minimalist IT tech vector icons, grid layout on isolated pure white background, cohesive line art with subtle gradient accents representing cloud computing, cyber security shield, database server, fiber optic network, API integration, microchip, ",
         "prompt_suffix": ", Dribbble award-winning icon set, consistent stroke weight, Figma design system style, perfectly centered icons",
         "negative_prompt": "3D realistic render, photographic noise, shadows, uneven sizing, messy lines"
+    },
+    "product_scene": {
+        "name": "产品应用场景图",
+        "description": "突出产品本体、在典型商业/办公/工业场景中的落地示意，保持产品几何与质感",
+        "default_aspect": "16:9",
+        "default_resolution": "2K",
+        "prompt_prefix": "Commercial product in real-world professional application scene, clean commercial lighting, crisp details, high quality focus on the central subject, ",
+        "prompt_suffix": ", realistic material texture, clean depth of field, authentic corporate setting, professional studio photography style",
+        "negative_prompt": "deformed, blurry, low resolution, unnatural geometry, distorted text, cheap render artifacts"
     }
 }
+
 
 # 内置已知供应商的默认推荐生图模型（本地独立预设加载失败时的开箱即用兜底）
 KNOWN_PROVIDER_IMAGE_MODELS = {

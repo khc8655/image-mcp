@@ -1,7 +1,7 @@
 // KHC Image MCP 控制台前端主入口微模块
 import { showToast, switchTab, openModal, closeModal } from './common.js?v=2.9.0';
 import { api, getStoredToken, setStoredToken } from './api.js?v=2.9.0';
-import { renderGenerationTab, selectGenMode, reorderGenModel, updateGenModelKey, updateGenModelRole, toggleGenModel, deleteGenModel, collectGenerationConfig } from './tab_generation.js?v=2.9.0';
+import { renderGenerationTab, selectGenMode, reorderGenModel, updateGenModelKey, updateGenModelRole, toggleGenModel, deleteGenModel, collectGenerationConfig, refreshStorageInfo, cleanStorageCache } from './tab_generation.js?v=2.9.0';
 import { renderVisionTab, selectVisMode, reorderVisionModel, updateVisionModelKey, updateVisionModelRole, toggleVisionModel, deleteVisionModel, collectVisionConfig } from './tab_vision.js?v=2.9.0';
 import { renderSearchTab, runSearchTest, collectSearchConfig } from './tab_search.js?v=2.9.0';
 import { renderSystemTab, testVaultConnectivity, syncAllVaultCredentials, saveAdminToken, collectSystemConfig } from './tab_system.js?v=2.9.0';
@@ -139,6 +139,8 @@ window.updateGenModelRole = (idx, role) => updateGenModelRole(idx, role, appConf
 window.toggleGenModel = (idx, checked) => toggleGenModel(idx, checked, appConfig, saveAllConfig);
 window.deleteGenModel = (idx) => deleteGenModel(idx, appConfig, saveAllConfig);
 window.openEditGenModel = (idx) => openEditModelModal('generation', idx, appConfig);
+window.refreshStorageInfo = refreshStorageInfo;
+window.cleanStorageCache = cleanStorageCache;
 
 // 识图模块导出
 window.selectVisMode = (mode) => selectVisMode(mode, appConfig);

@@ -46,6 +46,7 @@
           <option value="infra_scene">infra_scene — 信息化场景图 (智慧园区/数据中心全景/2.5D等距)</option>
           <option value="network_topology">network_topology — 网络拓扑图 (扁平节点/网络线缆/企业IT架构)</option>
           <option value="architecture">architecture — 系统软件架构图 (分层微服务/模块分区/色块明晰)</option>
+          <option value="product_scene">product_scene — 产品应用场景图 (突出产品本体/真实商业质感)</option>
           <option value="infographic">infographic — 科技信息图 (汇报海报/技术白皮书/工整中文排版)</option>
           <option value="icon_set">icon_set — 科技图标组 (极简扁平/一致色调/透明白底)</option>
         </select>
@@ -81,4 +82,50 @@
       </tbody>
     </table>
   </div>
+
+  <!-- 3. 图片存储与磁盘管理 -->
+  <div class="card" id="card-storage-management">
+    <div class="card-header-row">
+      <h2>🖼️ 生成图片存储与磁盘管理</h2>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-secondary btn-small" type="button" id="btnRefreshStorage" onclick="window.refreshStorageInfo()">
+          <svg class="icon"><use href="#icon-refresh"/></svg>
+          <span>刷新容量</span>
+        </button>
+        <button class="btn btn-danger btn-small" type="button" id="btnCleanStorage" onclick="window.cleanStorageCache()">
+          <svg class="icon"><use href="#icon-trash"/></svg>
+          <span>一键清理缓存图</span>
+        </button>
+      </div>
+    </div>
+    <p class="card-subtitle">
+      AI 生图成功后会在服务器本地持久化保存，便于文档复用与外网链接回源。您可以在此处监控磁盘占用情况并定期清理缓存。
+    </p>
+
+    <div class="form-grid-3" style="margin-top:12px;">
+      <div class="form-field">
+        <label>服务器存储路径</label>
+        <div id="storagePathDisplay" style="font-family:monospace;font-size:12px;padding:8px 10px;background:var(--khc-surface-sunken);border:1px solid var(--khc-border-subtle);border-radius:4px;word-break:break-all;color:var(--khc-text-primary);">
+          加载中...
+        </div>
+      </div>
+      <div class="form-field">
+        <label>已缓存图片总数</label>
+        <div id="storageCountDisplay" style="font-size:18px;font-weight:600;padding:6px 0;color:var(--khc-text-primary);">
+          - 张
+        </div>
+      </div>
+      <div class="form-field">
+        <label>占用磁盘空间</label>
+        <div id="storageSizeDisplay" style="font-size:18px;font-weight:600;padding:6px 0;color:var(--khc-accent, #2563eb);">
+          - MB
+        </div>
+      </div>
+    </div>
+    <div id="storageBreakdownRow" style="margin-top:12px;font-size:12px;color:var(--khc-text-secondary);display:none;">
+      <span>按日期分布：</span>
+      <span id="storageBreakdownTags"></span>
+    </div>
+  </div>
 </section>
+

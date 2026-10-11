@@ -114,5 +114,21 @@ export const api = {
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data.error || '检索失败');
     return data;
+  },
+
+  async getStorageInfo() {
+    const res = await fetch('/api/storage/info', { headers: getAuthHeaders() });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  },
+
+  async cleanStorage() {
+    const res = await fetch('/api/storage/clean', {
+      method: 'POST',
+      headers: getAuthHeaders()
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || '清理失败');
+    return data;
   }
 };

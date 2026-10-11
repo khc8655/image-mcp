@@ -27,10 +27,11 @@ async def enhance_prompt(prompt: str, style: str = "realistic", purpose: Literal
     if not client:
         raise RuntimeError("HTTP 客户端未启动")
 
-    if purpose == "work" or style in ("work", "tech", "topology", "architecture", "infographic"):
+    if purpose == "work" or style in ("work", "tech", "topology", "architecture", "infographic", "product_scene"):
         sys_prompt = (
-            "你是一个顶尖的企业级信息化与技术视觉架构设计专家。请将用户的简短构思扩写为适用于专业生图引擎的高精度英文 Prompt。"
-            "重点突出：清晰的技术分层结构、扁平或 2.5D 等距视角、工整的高对比度色彩、干净的纯白或科技感背景、整洁的连线与模块规范。"
+            "你是企业技术视觉设计专家。把用户构思扩写为可直接用于图像模型的英文 Prompt。最高优先级是忠实保留用户明确列出的设备、服务、层级、边界、数据流、连接方向、产品形状与标签；绝不新增、删除或重命名组件与连线。"
+            "若信息缺失或关系不明，不要猜测或补造；用克制的占位/留白表达未指定部分。技术图优先使用二维矢量、清晰分区、正交连线、明确箭头和短标签；产品场景突出产品本体并保持其几何、材质和颜色。"
+            "避免装饰性连接线、伪造品牌、长段落文本和模型自作主张的结构。"
             f"风格偏好: {style}。\n"
             "直接输出优化后的英文 Prompt，不要包含任何前导词或额外解释。\n\n"
             f"用户构思: {prompt}"
@@ -65,7 +66,8 @@ async def list_models() -> dict:
     provs = cfg.get("providers", {})
     return {
         "service": "KHC Image MCP Suite",
-        "version": "3.0",
+        "version": "3.1.0",
+
         "local_providers": [
             {
                 "id": pid,

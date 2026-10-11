@@ -21,6 +21,7 @@
 
 | 关注维度 | 指南文档与入口 | 说明 |
 | :--- | :--- | :--- |
+| **发版与质量门禁规范** | [👉 `RELEASE_SPEC.md`](./RELEASE_SPEC.md) | **强制发版守则**：四层质量门禁矩阵 (L1~L4)、前后端冒烟测试与发版/回滚 SOP |
 | **核心源码与开发** | [👉 `caddy/mcp-server/README.md`](./caddy/mcp-server/README.md) | **最核心必读手册**：包含目录职责表、调度算法、Presets 规范、开发避坑与测试套件 |
 | **网关与运维部署** | [👉 `caddy/README.md`](./caddy/README.md) | Caddy 反代配置、端口说明、Azure VM 运维脚本 (`manage.sh`) 与增量同步流程 |
 | **单元与集成测试** | [`caddy/mcp-server/tests/`](./caddy/mcp-server/tests/) | pytest，mock 上游，CI 自动运行 |

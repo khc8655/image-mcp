@@ -9,8 +9,10 @@ __pycache__/
 .wrangler/
 .dev.vars
 package-lock.json
+uv.lock
 test_*.png
 *.zip
+
 
 # OS & Editor files
 .DS_Store

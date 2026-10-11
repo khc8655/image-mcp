@@ -1,5 +1,6 @@
 // 生图业务微模块 (极简顺序调度与全生命周期模型运维)
 import { esc, showToast } from './common.js?v=2.9.0';
+import { api } from './api.js?v=2.9.0';
 
 export function renderGenerationTab(appConfig) {
   const gen = appConfig.generation || {};
@@ -15,6 +16,9 @@ export function renderGenerationTab(appConfig) {
 
   const sceneEl = document.getElementById('cfg_gen_scene');
   if (sceneEl) sceneEl.value = gen.default_scene || 'auto';
+
+  // 异步加载存储空间信息
+  loadStorageInfo();
 
   // 渲染活跃模型池表格
   const tbody = document.getElementById('genModelsTbody');
@@ -133,5 +137,80 @@ export function collectGenerationConfig(appConfig) {
   appConfig.generation.default_mode = 'sequential';
 }
 
+// ---------------------------------------------------------------------------
+// 图片存储与磁盘管理交互逻辑
+// ---------------------------------------------------------------------------
+export async function loadStorageInfo() {
+  const pathEl = document.getElementById('storagePathDisplay');
+  const countEl = document.getElementById('storageCountDisplay');
+  const sizeEl = document.getElementById('storageSizeDisplay');
+  const breakdownRow = document.getElementById('storageBreakdownRow');
+  const breakdownTags = document.getElementById('storageBreakdownTags');
+
+  if (!pathEl || !countEl || !sizeEl) return;
+
+  try {
+    const data = await api.getStorageInfo();
+    if (data.ok) {
+      pathEl.textContent = data.storage_path || 'static/generated';
+      countEl.textContent = `${data.total_images || 0} 张`;
+      sizeEl.textContent = data.total_size_human || '0 B';
+
+      if (data.dates_breakdown && data.dates_breakdown.length > 0) {
+        if (breakdownRow) breakdownRow.style.display = 'block';
+        if (breakdownTags) {
+          breakdownTags.innerHTML = data.dates_breakdown.map(d =>
+            `<span class="badge" style="margin-right:6px;font-size:11px;">${esc(d.date)}: ${d.count}张 (${d.size_human})</span>`
+          ).join('');
+        }
+      } else {
+        if (breakdownRow) breakdownRow.style.display = 'none';
+      }
+    }
+  } catch (err) {
+    pathEl.textContent = '获取存储路径失败';
+    countEl.textContent = '-';
+    sizeEl.textContent = '-';
+    console.error('加载图片存储信息失败:', err);
+  }
+}
+
+export async function refreshStorageInfo() {
+  const btn = document.getElementById('btnRefreshStorage');
+  if (btn) btn.disabled = true;
+  try {
+    await loadStorageInfo();
+    showToast('存储空间信息已刷新', 'info');
+  } catch (err) {
+    showToast('刷新存储信息失败: ' + err.message, 'error');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+export async function cleanStorageCache() {
+  if (!confirm('⚠️ 确定要清理服务器上所有已生成的缓存图片吗？\n\n此操作将物理删除 static/generated/ 下的所有历史图片文件，释放磁盘空间。')) {
+    return;
+  }
+
+  const btn = document.getElementById('btnCleanStorage');
+  if (btn) btn.disabled = true;
+
+  try {
+    const res = await api.cleanStorage();
+    if (res.ok) {
+      showToast(res.message || `成功清理 ${res.deleted_count} 张缓存图片`, 'success');
+      await loadStorageInfo();
+    } else {
+      showToast('清理失败: ' + (res.error || '未知错误'), 'error');
+    }
+  } catch (err) {
+    showToast('清理缓存图片异常: ' + err.message, 'error');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 // 兼容旧版调用
 export function selectGenMode() {}
+

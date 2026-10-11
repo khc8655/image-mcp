@@ -131,3 +131,77 @@ async def cleanup_loop(config_mgr, interval_seconds: int = 3600) -> None:
 
 def b64_to_bytes(b64_str: str) -> bytes:
     return base64.b64decode(b64_str)
+
+
+def format_bytes(size_bytes: int) -> str:
+    if size_bytes < 1024:
+        return f"{size_bytes} B"
+    elif size_bytes < 1024 * 1024:
+        return f"{size_bytes / 1024:.2f} KB"
+    elif size_bytes < 1024 * 1024 * 1024:
+        return f"{size_bytes / (1024 * 1024):.2f} MB"
+    else:
+        return f"{size_bytes / (1024 * 1024 * 1024):.2f} GB"
+
+
+def get_storage_stats() -> dict:
+    GENERATED_DIR.mkdir(parents=True, exist_ok=True)
+    total_count = 0
+    total_size = 0
+    dates_breakdown = []
+    if GENERATED_DIR.exists():
+        for date_dir in sorted(GENERATED_DIR.iterdir(), reverse=True):
+            if date_dir.is_dir() and not date_dir.name.startswith("."):
+                day_count = 0
+                day_size = 0
+                for f in date_dir.iterdir():
+                    if f.is_file() and not f.name.startswith("."):
+                        day_count += 1
+                        day_size += f.stat().st_size
+                total_count += day_count
+                total_size += day_size
+                dates_breakdown.append({
+                    "date": date_dir.name,
+                    "count": day_count,
+                    "size_bytes": day_size,
+                    "size_human": format_bytes(day_size),
+                })
+    return {
+        "storage_path": str(GENERATED_DIR.resolve()),
+        "total_images": total_count,
+        "total_size_bytes": total_size,
+        "total_size_human": format_bytes(total_size),
+        "dates_breakdown": dates_breakdown,
+    }
+
+
+def clean_storage() -> dict:
+    GENERATED_DIR.mkdir(parents=True, exist_ok=True)
+    base_resolved = GENERATED_DIR.resolve()
+    deleted_count = 0
+    freed_bytes = 0
+    for root, dirs, files in os.walk(GENERATED_DIR, topdown=False):
+        for name in files:
+            file_path = Path(root) / name
+            try:
+                freed_bytes += file_path.stat().st_size
+                file_path.unlink()
+                deleted_count += 1
+            except Exception:
+                pass
+        for name in dirs:
+            dir_path = Path(root) / name
+            try:
+                if not any(dir_path.iterdir()):
+                    dir_path.rmdir()
+            except Exception:
+                pass
+    return {
+        "ok": True,
+        "deleted_count": deleted_count,
+        "freed_bytes": freed_bytes,
+        "freed_human": format_bytes(freed_bytes),
+        "message": f"成功清理 {deleted_count} 张缓存图片，释放 {format_bytes(freed_bytes)} 磁盘空间",
+        "storage_path": str(base_resolved),
+    }
+
