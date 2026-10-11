@@ -11,7 +11,7 @@
 >    - **👁️ 识图与 OCR**：分级 OCR 等级（Fast/Standard/Document/GUI）、本地 RapidOCR ONNX 极速引擎与多模态模型池主备切换；
 >    - **🔍 搜图管理**：全网搜图引擎调度参数与搜图在线测试控制台（Playground 实时图片预览）；
 >    - **⚙️ 系统配置**：EdgeOne 凭据中枢（一键全量同步）、本地 Provider 资产仓库、独立 Presets 规则库（**免重启一键热重载**）与安全设置。
-> 5. **标准 UI 规范**：内嵌 Web 控制台（`/admin`）100% 遵循 `/Users/xk/Documents/design-system`（KHC Web Design System），零第三方重量级前端框架依赖。
+> 5. **标准 UI 规范**：内嵌 Web 控制台（`/admin`）遵循 KHC Web Design System，零第三方重量级前端框架依赖。
 
 ---
 
@@ -23,8 +23,8 @@
 | :--- | :--- | :--- |
 | **核心源码与开发** | [👉 `caddy/mcp-server/README.md`](./caddy/mcp-server/README.md) | **最核心必读手册**：包含目录职责表、调度算法、Presets 规范、开发避坑与测试套件 |
 | **网关与运维部署** | [👉 `caddy/README.md`](./caddy/README.md) | Caddy 反代配置、端口说明、Azure VM 运维脚本 (`manage.sh`) 与增量同步流程 |
-| **端到端闭环测试** | [`scratch/test_e2e_flow.py`](./caddy/mcp-server/scratch/test_e2e_flow.py) | 涵盖凭据拉取、挂载、行内切 Key、编辑参数、顺序故障转移等 10 项核心 E2E 测试 |
-| **生产集成验证** | [`scratch/verify_image_mcp.py`](./scratch/verify_image_mcp.py) | 针对 `https://oc.khc6.cn` 生产环境的全链路自动化回归脚本 |
+| **单元与集成测试** | [`caddy/mcp-server/tests/`](./caddy/mcp-server/tests/) | pytest，mock 上游，CI 自动运行 |
+| **生产集成验证** | [`scripts/live/verify_image_mcp.py`](./caddy/mcp-server/scripts/live/verify_image_mcp.py) | 针对生产环境的全链路回归脚本（需真实 Key，不进 CI） |
 
 ---
 
@@ -68,33 +68,79 @@
 
 ## MCP 核心工具清单 (Model Context Protocol 2.0.0)
 
-向 AI Agent 暴露 6 大标准多模态工具：
+向 AI Agent 暴露 7 个工具（均带 annotations 与 outputSchema，返回 structuredContent）：
 
 | 工具名称 | 类别 | 功能说明 | 典型入参 |
 | :--- | :--- | :--- | :--- |
-| 工具名称 | 类别 | 功能说明 | 典型入参 |
-| :--- | :--- | :--- | :--- |
-| **`generate_image`** | 生图 | 综合文生图与图生图，支持 10 种宽高比、4 级画质、5 大办公场景模板、种子与负向词 | `prompt`, `scene`, `aspect_ratio`, `resolution`, `action`, `image`, `negative_prompt`, `seed`, `count`, `model`, `provider` |
-| **`edit_image`** | 生图 | 图像编辑、风格重绘与主体参考图生图（快捷入口） | `image`, `prompt`, `scene`, `aspect_ratio`, `resolution`, `negative_prompt`, `seed`, `model`, `provider` |
-| **`describe_image`** | 识图 | 视觉识别与分级 OCR（顺序优先级调度，极速本地 / 通用分析 / 文档表格 / 界面坐标） | `image`, `prompt`, `preset`, `model`, `provider` |
-| **`search_images`** | 搜图 | 全网高质量搜图（文字搜图 + 联动内部 OCR 语义以图搜图） | `query`, `image`, `limit` |
+| **`generate_image`** | 生图 | 文生图，10 种比例、4 级画质、5 个办公场景模板；返回签名链接 + 缩略图 | `prompt`, `aspect_ratio`, `resolution`, `scene`, `negative_prompt`, `seed`, `count`, `model` |
+| **`edit_image`** | 生图 | AI 改图、风格重绘、mask 局部重绘 | `image`, `prompt`, `mask`, `aspect_ratio`, `count`, `model` |
+| **`transform_image`** | 修图 | 本地裁剪/旋转/翻转/缩放/放大/去背景/格式转换，零额度 | `image`, `crop`, `rotate`, `flip`, `width`, `height`, `upscale`, `remove_background`, `format` |
+| **`describe_image`** | 识图 | 分级 OCR：fast 本地 / standard / document（本地 OCR 校对）/ gui（结构化坐标） | `image`, `prompt`, `preset`, `model` |
+| **`search_images`** | 搜图 | 文字搜图；以图搜图（配置 SerpAPI 时走 Google Lens） | `query`, `image`, `size`, `aspect_ratio`, `limit` |
 | **`enhance_prompt`** | 辅助 | 将简短中文构思自动扩写为专业级英文绘图或办公架构拓扑提示词 | `prompt`, `style`, `purpose` |
 | **`list_models`** | 辅助 | 查询当前服务端已持久化的模型池、办公场景模板与当前调度模式 | 无 |
 
 ---
 
-## 本地开发与测试命令速查
+## 接入 Agent
+
+**远程（Streamable HTTP）** — Claude Code：
+```bash
+claude mcp add --transport http image-mcp https://oc.khc6.cn/mcp \
+  --header "Authorization: Bearer <CLIENT_TOKEN>"
+```
+Cursor / 其他支持 `mcp.json` 的客户端：
+```json
+{
+  "mcpServers": {
+    "image-mcp": {
+      "url": "https://oc.khc6.cn/mcp",
+      "headers": { "Authorization": "Bearer <CLIENT_TOKEN>" }
+    }
+  }
+}
+```
+
+**本地（stdio）** — 服务与 Agent 同机，可直接传本地图片路径（默认限 HOME 目录）：
+```json
+{
+  "mcpServers": {
+    "image-mcp": {
+      "command": "python",
+      "args": ["/path/to/image-mcp/caddy/mcp-server/server.py", "--stdio"]
+    }
+  }
+}
+```
+
+## 关键环境变量
+
+| 变量 | 说明 |
+| :--- | :--- |
+| `CLIENT_AUTH_TOKEN` | MCP 调用 Token，逗号分隔可配多个；也可在 config.json `auth.client_tokens` 中配置命名 Token 与 `rpm` |
+| `ADMIN_TOKEN` | 控制台 Token，**必须与客户端 Token 不同**；未设置时首次启动随机生成并写入 config.json |
+| `PUBLIC_BASE_URL` | 公网地址（如 `https://oc.khc6.cn`），用于生成生图签名链接；不设置则内联返回原图 |
+| `IMAGE_MCP_SIGNING_SECRET` | 签名链接密钥，不设置则自动生成 |
+| `IMAGE_MCP_DATA_DIR` | 生图存储目录，默认 `caddy/mcp-server/data` |
+| `IMAGE_MCP_ALLOW_LOCAL_PATHS` / `IMAGE_MCP_LOCAL_ROOTS` | 是否接受本地路径入参及白名单目录（stdio 模式自动开启） |
+| `SERPAPI_KEY` | 启用 Google Lens 以图搜图（也可在控制台 `search.serpapi_key` 配置） |
+
+## 本地开发与测试
 
 ```bash
-# 1. 语法静态校验
-/Users/xk/Documents/mcp/.venv311/bin/python -m py_compile caddy/mcp-server/server.py caddy/mcp-server/config_manager.py
+cd caddy/mcp-server
+python -m venv .venv && . .venv/bin/activate
+pip install -r requirements.txt -r requirements-dev.txt
 
-# 2. 运行 v3.0 本地功能测试套件
-/Users/xk/Documents/mcp/.venv311/bin/python scratch/test_v3_features.py
+ruff check .          # 静态检查
+pytest -q             # 单元 + 集成测试（mock 上游，无需真实 Key）
+python server.py      # 本地启动 → http://127.0.0.1:3002/admin
+```
 
-# 3. 本地启动服务进行调试
-cd caddy/mcp-server && /Users/xk/Documents/mcp/.venv311/bin/python server.py
-# 浏览器访问: http://127.0.0.1:3002/admin
+或使用 Docker：
+```bash
+docker build -t image-mcp caddy/mcp-server
+docker run -p 3002:3002 -e CLIENT_AUTH_TOKEN=xxx -e ADMIN_TOKEN=yyy -v $PWD/data:/app/data image-mcp
 ```
 
 ---
@@ -107,20 +153,14 @@ cd caddy/mcp-server && /Users/xk/Documents/mcp/.venv311/bin/python server.py
 * **边缘加速**：支持腾讯云 EdgeOne / Cloudflare CDN IPv6 回源至 TCP 3000
 * **增量同步与重启示例**：
   ```bash
-  # 同步核心程序
-  scp -i <YOUR_SSH_KEY_PATH> -o StrictHostKeyChecking=no \
-    caddy/mcp-server/server.py \
-    caddy/mcp-server/config_manager.py \
-    "<USERNAME>@[<YOUR_SERVER_IPV6>]:/home/ubuntu/caddy/mcp-server/"
-
-  # 同步预设、模板与静态资源
-  scp -i <YOUR_SSH_KEY_PATH> -o StrictHostKeyChecking=no -r \
-    caddy/mcp-server/presets \
-    caddy/mcp-server/templates \
-    caddy/mcp-server/static \
-    "<USERNAME>@[<YOUR_SERVER_IPV6>]:/home/ubuntu/caddy/mcp-server/"
-
-  # 远程重启服务
-  ssh -i <YOUR_SSH_KEY_PATH> -o StrictHostKeyChecking=no \
-    <USERNAME>@<YOUR_SERVER_IPV6> "/home/ubuntu/caddy/manage.sh restart"
+  # 同步整个服务目录（排除运行时数据、密钥配置、测试与脚本）
+  rsync -avz -e "ssh -i <YOUR_SSH_KEY_PATH>" \
+    --exclude '.venv*' --exclude '__pycache__' --exclude 'config.json' \
+    --exclude 'data/' --exclude 'tests/' --exclude 'scripts/' \
+    caddy/mcp-server/ "<USERNAME>@[<YOUR_SERVER_IPV6>]:/home/ubuntu/caddy/mcp-server/"
+  rsync -avz -e "ssh -i <YOUR_SSH_KEY_PATH>" caddy/Caddyfile "<USERNAME>@[<YOUR_SERVER_IPV6>]:/home/ubuntu/caddy/"
+  
+  # 远程安装依赖并重启
+  ssh -i <YOUR_SSH_KEY_PATH> <USERNAME>@<YOUR_SERVER_IPV6> \
+    "cd /home/ubuntu/caddy && .venv/bin/pip install -r mcp-server/requirements.txt && ./manage.sh restart"
   ```

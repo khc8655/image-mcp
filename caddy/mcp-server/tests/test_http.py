@@ -4,7 +4,6 @@ import pytest
 from starlette.testclient import TestClient
 
 import server
-from conftest import png_b64
 
 HDR = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
 AUTH = {**HDR, "Authorization": "Bearer client-token-123456"}

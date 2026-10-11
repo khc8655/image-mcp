@@ -66,10 +66,20 @@
 
 ```text
 caddy/mcp-server/
-├── server.py                 # [核心主程序] MCP 2.0.0 工具定义、Starlette HTTP 路由、生图/识图/搜图执行器
+├── server.py                 # [入口] create_app()、路由、生命周期；--stdio 本地模式
+├── core.py                   # [共享] MCP 实例、常量/场景模板、图像输入解析、输出模型、通用工具
+├── providers.py              # [上游适配] adapter_rules 驱动的生图/识图执行器
+├── tools/                    # [MCP 工具] generation / vision / search / transform / misc
+├── admin.py                  # [控制台 API] 配置、Vault 同步、Presets 热重载、搜图测试
+├── security.py               # [安全] 客户端鉴权+限流、签名 URL、本地路径策略、SSRF、错误脱敏
+├── storage.py                # [存储] 生图落盘、签名下载、缩略图、过期清理
+├── imaging.py                # [本地修图] 裁剪/旋转/缩放/去背景/格式转换
+├── cache.py                  # [缓存] 识图与搜图 TTL 缓存
+├── tests/                    # [测试] pytest 套件（CI 运行）
+├── scripts/                  # [脚本] live/ 生产回归、legacy/ 旧版手工脚本（不进 CI）
 ├── config_manager.py         # [配置中枢] ConfigManager 单例，负责 config.json 读写、脱敏、独立 Presets 热加载
 ├── config.json               # [运行时配置] 持久化保存的本地 Provider 凭据、模型池、调度策略、搜图设置
-├── requirements.txt          # [依赖清单] Python 依赖声明 (mcp, starlette, uvicorn, httpx, rapidocr 等)
+├── requirements.txt          # [依赖清单] 运行依赖；requirements-extra.txt 为可选去背景依赖，requirements-dev.txt 为开发依赖
 ├── presets/                  # [独立适配器规则库] 零代码耦合的独立厂商规范
 │   ├── catalog.json          # 规则库目录清单与能力索引
 │   ├── google.json           # Google Gemini / Vertex AI 原生生图与多模态规则
@@ -187,7 +197,7 @@ caddy/mcp-server/
 
 ## 4. 独立适配器规范 (`presets/{provider}.json`)
 
-任何接手本项目的 Agent 如需接入新的模型提供商，**无需修改 `server.py` 的核心调度逻辑**，只需在 `presets/` 下新建一个 JSON 文件，并遵循以下 Schema：
+任何接手本项目的 Agent 如需接入新的模型提供商，**无需修改核心调度逻辑**，只需在 `presets/` 下新建一个 JSON 文件，并遵循以下 Schema：
 
 ```json
 {
@@ -252,7 +262,7 @@ caddy/mcp-server/
 - 每次修改前端 JS 文件，必须同步递增版本号（如 `2.8.1`），避免腾讯云 EdgeOne 或浏览器强缓存历史切片导致 `Uncaught SyntaxError` 白屏。
 
 ### 5.2 页面拼装机制 (`templates/admin.html`)
-服务端在 `server.py` 的 `admin_page()` 函数中，使用 Python 原生字符串替换完成极速拼装：
+服务端在 `admin.py` 的 `admin_page()` 函数中，使用 Python 原生字符串替换完成极速拼装：
 ```html
 <!-- include:icons -->
 <!-- include:tab_generation -->
@@ -267,68 +277,36 @@ caddy/mcp-server/
 
 ## 6. 本地开发、调试与运行指南
 
-### 6.1 虚拟环境与依赖准备
-根据开发机环境选择 Python 解释器（建议 Python 3.11+）：
+### 6.1 环境准备
 ```bash
-# 1. 确保使用专门的虚拟环境 (严禁使用系统全局 Python)
-cd /Users/xk/Documents/vertex/caddy/mcp-server
-
-# 本地推荐使用的 Python 3.11 环境：
-/Users/xk/Documents/mcp/.venv311/bin/python --version
-
-# 2. 验证依赖完整性
-/Users/xk/Documents/mcp/.venv311/bin/pip list | grep -E "mcp|httpx|starlette|uvicorn"
+cd caddy/mcp-server
+python3.11 -m venv .venv && . .venv/bin/activate
+pip install -r requirements.txt -r requirements-dev.txt
 ```
 
-### 6.2 语法校验
-修改 Python 源码后，务必第一时间执行编译检查：
+### 6.2 静态检查
 ```bash
-/Users/xk/Documents/mcp/.venv311/bin/python -m py_compile server.py config_manager.py
+ruff check .
 ```
 
-### 6.3 本地启动服务进行调试
+### 6.3 本地启动
 ```bash
-/Users/xk/Documents/mcp/.venv311/bin/python server.py
-# 服务默认在 127.0.0.1:3002 启动
-# 访问控制台：http://127.0.0.1:3002/admin
+python server.py            # http://127.0.0.1:3002/admin
+python server.py --stdio    # stdio 模式
 ```
 
 ---
 
-## 7. 自动化测试套件与执行规范
+## 7. 自动化测试
 
-所有测试工具均保存在 `caddy/mcp-server/scratch/` 目录中，在进行任何提交或部署前，**必须保证以下测试 100% 通过**：
-
-### 7.1 主力全生命周期闭环 E2E 测试
 ```bash
-/Users/xk/Documents/mcp/.venv311/bin/python scratch/test_e2e_flow.py
+pytest -q
 ```
-**覆盖验证步骤**：
-1. `[Step 1]` 模拟中枢全量同步凭据并与本地 Presets 合并落盘；
-2. `[Step 2]` 模拟控制台纯点选挂载模型至活跃池；
-3. `[Step 3]` 模拟表格行内秒级修改偏好角色；
-4. `[Step 4]` 模拟行内启用/禁用切换；
-5. `[Step 5]` 模拟模型移除；
-6. `[Step 6]` 模拟挂载模型时自主选择绑定 Key（如 `vip`）；
-7. `[Step 7]` 模拟表格行内即时切换绑定 Key；
-8. `[Step 8]` 模拟编辑弹窗修改厂商高级参数；
-9. `[Step 9]` 模拟物理顺序调度：首选模型异常时自动故障转移至第 2 顺位并成功出图；
-10. `[Step 10]` 模拟 Agent 显式指定 `provider`/`model` 时定向调度目标模型。
+`tests/` 覆盖：鉴权与限流、签名下载、SSRF、错误脱敏、顺序故障转移、mask 路由、比例覆盖规则、gui 坐标解析、
+本地修图、Lens 以图搜图、文档 OCR 校对、缓存、tools/list 的 schema 与注解、stdio 启动。全部 mock 上游，无需真实 Key，
+每次 push / PR 由 GitHub Actions 自动运行。
 
-### 7.2 适配规则与纯凭据单测
-```bash
-/Users/xk/Documents/mcp/.venv311/bin/python scratch/test_dual_pillars_mcp.py
-```
-
-### 7.3 上游厂商 Payload 协议分发拦截单测
-```bash
-/Users/xk/Documents/mcp/.venv311/bin/python scratch/test_payload_dispatch.py
-```
-
-### 7.4 线上生产环境端到端验证
-```bash
-/Users/xk/Documents/mcp/.venv311/bin/python /Users/xk/Documents/vertex/scratch/verify_image_mcp.py
-```
+需要真实 Key 的线上回归脚本放在 `scripts/live/`（如 `verify_image_mcp.py`），旧版手工脚本归档在 `scripts/legacy/`，均不进 CI。
 
 ---
 
@@ -345,21 +323,18 @@ cd /Users/xk/Documents/vertex/caddy/mcp-server
   * 端口开放：仅监听 TCP `3000`（Caddy 反向代理），后端 Python 运行在内部 `127.0.0.1:3002`
   * 域名与边缘加速：`https://oc.khc6.cn`（腾讯云 EdgeOne 托管）
 
-### 8.2 生产文件增量同步 (SCP)
-在本地运行以下命令，将代码、模板、静态资产与预设同步至云端：
+### 8.2 生产文件增量同步 (rsync)
 ```bash
-# 同步 Python 核心程序
-scp -i <YOUR_SSH_KEY_PATH> -o StrictHostKeyChecking=no \
-  caddy/mcp-server/server.py \
-  caddy/mcp-server/config_manager.py \
-  "ubuntu@[<YOUR_SERVER_IPV6>]:/home/ubuntu/caddy/mcp-server/"
+# 同步整个服务目录（排除运行时数据、密钥配置、测试与脚本）
+rsync -avz -e "ssh -i <YOUR_SSH_KEY_PATH>" \
+  --exclude '.venv*' --exclude '__pycache__' --exclude 'config.json' \
+  --exclude 'data/' --exclude 'tests/' --exclude 'scripts/' \
+  caddy/mcp-server/ "ubuntu@[<YOUR_SERVER_IPV6>]:/home/ubuntu/caddy/mcp-server/"
+rsync -avz -e "ssh -i <YOUR_SSH_KEY_PATH>" caddy/Caddyfile "ubuntu@[<YOUR_SERVER_IPV6>]:/home/ubuntu/caddy/"
 
-# 递归同步模板、静态资产与适配规则
-scp -i <YOUR_SSH_KEY_PATH> -o StrictHostKeyChecking=no -r \
-  caddy/mcp-server/presets \
-  caddy/mcp-server/templates \
-  caddy/mcp-server/static \
-  "ubuntu@[<YOUR_SERVER_IPV6>]:/home/ubuntu/caddy/mcp-server/"
+# 远程安装依赖并重启
+ssh -i <YOUR_SSH_KEY_PATH> ubuntu@<YOUR_SERVER_IPV6> \
+  "cd /home/ubuntu/caddy && .venv/bin/pip install -r mcp-server/requirements.txt && ./manage.sh restart"
 ```
 
 ### 8.3 远程服务重启与状态查看
