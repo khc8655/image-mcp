@@ -25,6 +25,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from contextlib import asynccontextmanager
+from typing import Annotated, Literal, Optional
 
 import httpx
 import uvicorn
@@ -37,11 +38,16 @@ SERVER_START_TIME = time.time()
 
 
 try:
-    from mcp.server.mcpserver import MCPServer as FastMCP, Image
+    from mcp.server.mcpserver import MCPServer as FastMCP, Image, Context
 except ImportError:
-    from mcp.server.fastmcp import FastMCP, Image
+    from mcp.server.fastmcp import FastMCP, Image, Context
+from mcp import types as mcp_types
+from pydantic import BaseModel, Field
 
 from config_manager import config_mgr, DEFAULT_IMAGE_ADAPTER_RULES
+import security
+import storage
+from security import sanitize_error
 
 # ---------------------------------------------------------------------------
 # 日志配置
@@ -152,38 +158,9 @@ _gcp_token_cache: dict = {"token": None, "expires_at": 0.0}
 
 
 # ---------------------------------------------------------------------------
-# SSRF 安全校验与图像输入解析
+# 图像输入解析（SSRF / 本地路径策略见 security.py）
 # ---------------------------------------------------------------------------
-async def validate_url_safety(url_str: str):
-    """异步 DNS 解析并校验 IP 安全性，防范 DNS Rebinding 与内网探测攻击。"""
-    parsed = urllib.parse.urlparse(url_str)
-    hostname = parsed.hostname
-    if not hostname:
-        raise ValueError("无效的图片 URL: 缺少 hostname")
-
-    hostname = hostname.lower()
-    if hostname in ("localhost", "::1", "0.0.0.0"):
-        raise ValueError("SSRF 防御拦截: 不允许访问本地回环地址")
-
-    try:
-        ip = ipaddress.ip_address(hostname)
-        if ip.is_private or ip.is_link_local or ip.is_loopback or ip.is_reserved:
-            raise ValueError(f"SSRF 防御拦截: 私有/保留 IP 地址 {ip} 禁止访问")
-        return
-    except ValueError as exc:
-        if "SSRF 防御拦截" in str(exc):
-            raise
-
-    loop = asyncio.get_running_loop()
-    try:
-        addr_info = await loop.getaddrinfo(hostname, parsed.port or (443 if parsed.scheme == "https" else 80))
-    except socket.gaierror:
-        raise ValueError(f"SSRF 防御拦截: 无法解析域名 {hostname}")
-
-    for family, _, _, _, sockaddr in addr_info:
-        ip = ipaddress.ip_address(sockaddr[0])
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
-            raise ValueError(f"SSRF 防御拦截: 域名 {hostname} 解析到的 IP {ip} 属于内网保留地址")
+validate_url_safety = security.validate_url_safety  # 兼容旧引用
 
 
 def detect_image_mime(b64_str: str) -> str:
@@ -200,89 +177,30 @@ def detect_image_mime(b64_str: str) -> str:
     return "image/png"
 
 
-GENERATED_IMAGES_DIR = Path(__file__).resolve().parent / "static" / "generated"
-
-
-def save_generated_image_to_disk(b64_str: str, mime: str = "image/png") -> dict:
-    """将生图成功的 Base64 数据持久化至 static/generated/YYYYMMDD 目录并返回元数据"""
-    try:
-        ext = "png"
-        if "jpeg" in mime or "jpg" in mime:
-            ext = "jpg"
-        elif "webp" in mime:
-            ext = "webp"
-
-        date_str = datetime.now().strftime("%Y%m%d")
-        target_dir = GENERATED_IMAGES_DIR / date_str
-        target_dir.mkdir(parents=True, exist_ok=True)
-
-        img_id = uuid.uuid4().hex[:12]
-        filename = f"gen_{int(time.time())}_{img_id}.{ext}"
-        filepath = target_dir / filename
-
-        img_bytes = base64.b64decode(b64_str)
-        filepath.write_bytes(img_bytes)
-
-        rel_url = f"/static/generated/{date_str}/{filename}"
-        return {
-            "saved_path": str(filepath),
-            "relative_url": rel_url,
-            "filename": filename,
-            "size_bytes": len(img_bytes)
-        }
-    except Exception as e:
-        logger.warning(f"持久化保存生图文件失败: {e}")
-        return {}
+_B64_RE = re.compile(r"^[A-Za-z0-9+/=\s]+$")
 
 
 async def resolve_image_to_base64(client: httpx.AsyncClient, image_str: str) -> str:
-    """将输入的图片字符串（Base64 / 本地安全路径 / HTTP URL）统一转换为纯 Base64。"""
-    image_str = image_str.strip()
+    """将输入的图片（data URI / Base64 / http(s) URL / 白名单本地路径）统一转换为纯 Base64。"""
+    image_str = (image_str or "").strip()
     if not image_str:
         raise ValueError("图片入参为空")
 
     if image_str.startswith("data:image/"):
-        parts = image_str.split(",")
-        return parts[1] if len(parts) > 1 else parts[0]
+        parts = image_str.split(",", 1)
+        return parts[1] if len(parts) > 1 else ""
 
-    # 安全检查：防御本地敏感文件外带 (LFI / Path Traversal)
-    is_path = "/" in image_str or "\\" in image_str
-    if is_path and not image_str.startswith("http://") and not image_str.startswith("https://"):
-        norm_path = os.path.normpath(image_str)
-        lower_path = norm_path.lower()
-        forbidden_keywords = ["config.json", ".env", "/etc/", "/proc/", "/sys/", "/var/", "id_rsa", "pem", "passwd", "shadow"]
-        if any(fk in lower_path for fk in forbidden_keywords) or ".." in norm_path:
-            raise ValueError(f"安全策略拦截: 禁止读取敏感文件或跨目录访问 ({image_str})")
+    if image_str.startswith(("http://", "https://")):
+        raw = await security.safe_download(client, image_str)
+        return base64.b64encode(raw).decode("utf-8")
 
-        valid_img_exts = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp")
-        if lower_path.endswith(valid_img_exts) and os.path.exists(norm_path) and os.path.isfile(norm_path):
-            if os.path.getsize(norm_path) > 20 * 1024 * 1024:
-                raise ValueError("图片文件超过 20MB 上限")
-            with open(norm_path, "rb") as f:
-                return base64.b64encode(f.read()).decode("utf-8")
-
-    if (
-        (not image_str.startswith("http://") and not image_str.startswith("https://") and "/" not in image_str and "\\" not in image_str and len(image_str) > 100) or
-        (len(image_str) > 1000 and not image_str.startswith("http://") and not image_str.startswith("https://"))
-    ):
+    # 纯 Base64（足够长且只含 Base64 字符）
+    if len(image_str) > 100 and _B64_RE.match(image_str[:4096]):
         return image_str
 
-    if image_str.startswith("http://") or image_str.startswith("https://"):
-        await validate_url_safety(image_str)
-        async with client.stream("GET", image_str, timeout=30.0) as resp:
-            if resp.status_code != 200:
-                raise RuntimeError(f"下载网络图片失败: {image_str}, status={resp.status_code}")
-            content_chunks = []
-            total_size = 0
-            async for chunk in resp.aiter_bytes():
-                total_size += len(chunk)
-                if total_size > 20 * 1024 * 1024:
-                    raise ValueError("图片大小超过 20MB 上限")
-                content_chunks.append(chunk)
-            raw_bytes = b"".join(content_chunks)
-            return base64.b64encode(raw_bytes).decode("utf-8")
-
-    return image_str
+    # 其余视为本地路径：远程模式默认拒绝，stdio/白名单模式才读取
+    raw = security.read_local_image(image_str)
+    return base64.b64encode(raw).decode("utf-8")
 
 
 _rapidocr_engine = None
@@ -298,11 +216,113 @@ def get_rapidocr_engine():
     return _rapidocr_engine
 
 
-def to_mcp_images(raw_images: list[dict]) -> list[Image]:
-    return [
-        Image(data=base64.b64decode(img["b64"]), format=img.get("mime", "image/png").split("/")[-1])
-        for img in raw_images if "b64" in img
-    ]
+# ---------------------------------------------------------------------------
+# 结构化输出模型 (outputSchema / structuredContent)
+# ---------------------------------------------------------------------------
+class Attempt(BaseModel):
+    target: str = Field(description="provider/model")
+    error: str = Field(description="脱敏后的失败原因")
+
+
+class GeneratedImage(BaseModel):
+    url: Optional[str] = Field(None, description="签名下载链接（带过期时间）；未配置公网地址时为空，原图以内联图片返回")
+    filename: str
+    mime: str
+    size_bytes: int
+    width: Optional[int] = None
+    height: Optional[int] = None
+
+
+class GenerationResult(BaseModel):
+    provider: str
+    model: str
+    images: list[GeneratedImage]
+    aspect_ratio: str
+    resolution: str
+    scene: str
+    seed: int
+    elapsed_ms: int
+    failed_attempts: list[Attempt] = []
+
+
+class UIElement(BaseModel):
+    label: str = ""
+    type: str = ""
+    box: list[int] = Field(description="[ymin, xmin, ymax, xmax]，0~1000 归一化坐标")
+    center: list[int] = Field(description="[y, x]，0~1000 归一化坐标")
+
+
+class VisionResult(BaseModel):
+    text: str
+    preset: str
+    engine: str = Field(description="rapidocr 或 provider/model")
+    elements: Optional[list[UIElement]] = Field(None, description="仅 gui 预设：解析出的可交互元素")
+    failed_attempts: list[Attempt] = []
+
+
+class ImageHit(BaseModel):
+    title: str
+    image_url: str
+    thumbnail_url: Optional[str] = None
+    page_url: Optional[str] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    source: str
+
+
+class SearchResult(BaseModel):
+    query: str
+    mode: str = Field(description="text | reverse_keywords")
+    results: list[ImageHit]
+
+
+def _tool_result(text: str, structured: BaseModel, extra: list | None = None) -> mcp_types.CallToolResult:
+    content = [mcp_types.TextContent(type="text", text=text)] + list(extra or [])
+    return mcp_types.CallToolResult(content=content, structuredContent=structured.model_dump(mode="json"))
+
+
+async def _progress(ctx, done: float, total: float, message: str) -> None:
+    if ctx is None:
+        return
+    try:
+        await ctx.report_progress(done, total, message)
+    except TypeError:
+        try:
+            await ctx.report_progress(done, total)
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+
+def _annotations(read_only: bool, open_world: bool = True, idempotent: bool = False, title: str = ""):
+    return mcp_types.ToolAnnotations(
+        title=title or None,
+        readOnlyHint=read_only,
+        destructiveHint=False,
+        idempotentHint=idempotent,
+        openWorldHint=open_world,
+    )
+
+
+def _pick_candidates(models: list[dict], target: str) -> list[dict]:
+    """显式指定 model/provider 时提升至第 1 位：优先精确匹配，其次 provider，最后子串。"""
+    target = (target or "").strip().lower()
+    if not target:
+        return list(models)
+    if "/" in target:
+        p, _, m = target.partition("/")
+        exact = [x for x in models if x.get("provider", "").lower() == p and x.get("model", "").lower() == m]
+    else:
+        exact = [x for x in models if x.get("model", "").lower() == target]
+    chosen = (
+        exact[:1]
+        or [x for x in models if x.get("provider", "").lower() == target][:1]
+        or [x for x in models if target in x.get("model", "").lower()][:1]
+    )
+    if not chosen:
+        return list(models)
+    return chosen + [x for x in models if x is not chosen[0]]
 
 
 # ---------------------------------------------------------------------------
@@ -696,51 +716,80 @@ async def execute_vision_completion(
 # ---------------------------------------------------------------------------
 # MCP 核心工具 1: 生图与图生图 (顺序优先级调度 + 链式故障转移)
 # ---------------------------------------------------------------------------
-@mcp.tool()
+AspectRatio = Literal["auto", "1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "4:5", "5:4", "21:9"]
+Resolution = Literal["auto", "1K", "2K", "4K"]
+Scene = Literal["auto", "none", "infra_scene", "network_topology", "architecture", "infographic", "icon_set"]
+VisionPreset = Literal["", "fast", "standard", "document", "gui"]
+
+
+def _build_generation_content(raw: list[dict]) -> tuple[list[GeneratedImage], list]:
+    """持久化生图结果，返回结构化元数据与面向 Agent 的内容块。
+
+    return_mode=url 且配置了公网地址：签名 URL (resource_link) + 小缩略图，避免数 MB Base64 撑爆上下文；
+    否则回退为内联原图。
+    """
+    mode = config_mgr.get("generation", "return_mode", default="url")
+    has_base = bool(storage.public_base_url(config_mgr))
+    images: list[GeneratedImage] = []
+    blocks: list = []
+    for item in raw:
+        if "b64" not in item:
+            continue
+        data = base64.b64decode(item["b64"])
+        mime = item.get("mime") or detect_image_mime(item["b64"])
+        meta = storage.save_image(data, mime)
+        url = storage.signed_url(config_mgr, meta["rel_path"]) if has_base else None
+        images.append(GeneratedImage(
+            url=url, filename=meta["filename"], mime=mime, size_bytes=meta["size_bytes"],
+            width=meta["width"], height=meta["height"],
+        ))
+        if mode == "url" and url:
+            blocks.append(mcp_types.ResourceLink(
+                type="resource_link", uri=url, name=meta["filename"], mimeType=mime, size=meta["size_bytes"],
+                description="生成图片原图（签名链接，限时有效）",
+            ))
+            thumb = storage.make_thumbnail(data)
+            if thumb:
+                blocks.append(mcp_types.ImageContent(type="image", data=base64.b64encode(thumb).decode(), mimeType="image/jpeg"))
+        else:
+            blocks.append(mcp_types.ImageContent(type="image", data=item["b64"], mimeType=mime))
+    return images, blocks
+
+
+@mcp.tool(annotations=_annotations(read_only=False, title="生成图片"))
 async def generate_image(
     prompt: str,
-    aspect_ratio: str = "auto",
-    action: str = "generate",
-    image: str = "",
-    mask: str = "",
-    scene: str = "auto",
-    resolution: str = "auto",
+    aspect_ratio: AspectRatio = "auto",
+    resolution: Resolution = "auto",
+    scene: Scene = "auto",
     negative_prompt: str = "",
     seed: int = -1,
-    count: int = 1,
+    count: Annotated[int, Field(ge=1, le=4)] = 1,
     model: str = "",
-    provider: str = "",
-    style: str = "auto",
-    mode: str = "sequential"
-) -> list:
-    """文生图与图生图综合工具。默认采用后台配置的物理顺序优先级调度与自动故障转移。
+    action: Literal["generate", "edit"] = "generate",
+    image: str = "",
+    mask: str = "",
+    ctx: Optional[Context] = None,
+) -> Annotated[mcp_types.CallToolResult, GenerationResult]:
+    """文生图（需要改图请优先用 edit_image）。按后台配置的模型顺序调度，失败或超时自动切换下一个。
 
     参数说明:
-        prompt: 画面意图描述词。
-        aspect_ratio: 比例，支持 "auto"(默认，跟随场景模板/后台配置，均未配置时为 1:1) 及 10 种比例："1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "4:5", "5:4", "21:9"。显式传入的比例不会被覆盖。
-        action: 操作类型，"generate"(文生图) 或 "edit"(图生图)。默认 "generate"。
-        image: 参考图（仅在 action="edit" 时需要），支持公网 URL、本地文件绝对路径或 Base64。
-        mask: 可选，局部重绘蒙版（仅 action="edit" 时生效），格式同 image。
-        scene: 办公/工作专业场景预设模板。可选值：
-               - "auto": 默认跟随后台配置，若未配置则保持原始输入；
-               - "infra_scene": 信息化全景场景图（数据中心/智慧园区/政务云/工业互联网 2.5D 高清示意图）；
-               - "network_topology": 网络拓扑示意图（核心路由/防火墙/混合云整洁连线效果图）；
-               - "architecture": 系统软件架构图（分层微服务/API网关/数据流清晰色块图）；
-               - "infographic": 科技信息图/汇报海报（白皮书与技术汇报高质感排版图）；
-               - "icon_set": 科技图标与组件组（极简纯白底扁平科技图标套件）；
-               - "none": 不套用任何模板，使用纯净提示词。
-        resolution: 画质分辨率，可选 "auto"(默认), "1K", "2K", "4K"。
-        negative_prompt: 负向提示词（不想在画面中出现的元素或瑕疵）。
-        seed: 随机种子 (整数，>= 0 时锁定随机性以便复现风格；-1 为完全随机)。
-        count: 生成张数 (默认为 1)。
-        model: 可选，显式指定具体模型 ID（留空则默认按后台配置顺序调度第 1 个主力模型）。
-        provider: 可选，显式指定模型提供商（留空则默认按后台配置顺序调度）。
-        style: 兼容参数，风格偏好。
-        mode: 兼容参数，默认 "sequential"(顺序优先级模式)。
+        prompt: 画面描述，中英文均可。
+        aspect_ratio: "auto"(默认，跟随场景模板/后台配置，均无则 1:1) 或指定比例；显式指定不会被覆盖。
+        resolution: "auto" | "1K" | "2K" | "4K"。
+        scene: 办公场景模板。"auto" 跟随后台；"none" 不套模板；
+               infra_scene 信息化全景 / network_topology 网络拓扑 / architecture 软件架构 /
+               infographic 汇报海报 / icon_set 图标组。
+        negative_prompt: 不希望出现的元素。
+        seed: >=0 固定随机性以便复现；-1 随机。
+        count: 张数 1~4。
+        model: 可选，指定模型，格式 "provider/model"、模型 ID 或 provider 名。
+    返回: 签名链接 + 缩略图（或原图），structuredContent 中含模型、尺寸、seed、失败记录。
     """
     client: httpx.AsyncClient = getattr(mcp, "_http_client", None)
     if not client:
         raise RuntimeError("HTTP 客户端未启动")
+    started = time.monotonic()
 
     bound_models = [
         m for m in config_mgr.get("generation", "models", default=[])
@@ -750,9 +799,9 @@ async def generate_image(
         raise RuntimeError("当前服务端尚未绑定任何可用生图模型，请在 Web 管理端 (/admin) 挂载生图模型")
 
     # 1. 办公场景预设模板解析与提示词拼装
-    active_scene = scene.strip()
+    active_scene = (scene or "auto").strip()
     if active_scene == "auto":
-        active_scene = config_mgr.get("generation", "default_scene", default="none")
+        active_scene = config_mgr.get("generation", "default_scene", default="none") or "none"
 
     final_prompt = prompt.strip()
     final_negative = negative_prompt.strip()
@@ -770,7 +819,6 @@ async def generate_image(
         if (target_res == "auto" or not target_res) and sc.get("default_resolution"):
             target_res = sc["default_resolution"]
 
-    # 全局默认参数回退
     if target_aspect == "auto":
         # 兼容 Web 控制台写入的 default_aspect_ratio 与旧字段 default_aspect
         cfg_aspect = (
@@ -788,39 +836,28 @@ async def generate_image(
 
     image_b64 = ""
     mask_b64 = ""
-    if action == "edit" and image:
+    if action == "edit":
+        if not image:
+            raise ValueError("action=edit 时必须提供 image")
         image_b64 = await resolve_image_to_base64(client, image)
         if mask:
             mask_b64 = await resolve_image_to_base64(client, mask)
 
-    # 2. 候选排序：若调用方显式指定了 model 或 provider，则将匹配模型提升至第 1 位
-    target = (model or provider).strip().lower()
-    if target:
-        chosen = None
-        remaining = []
-        for m in bound_models:
-            m_id = m.get("model", "").lower()
-            p_id = m.get("provider", "").lower()
-            if not chosen and (target == m_id or target in m_id or target == p_id):
-                chosen = m
-            else:
-                remaining.append(m)
-        candidates = [chosen] + remaining if chosen else bound_models
-    else:
-        candidates = list(bound_models)
-
+    candidates = _pick_candidates(bound_models, model)
     timeout_sec = float(config_mgr.get("generation", "timeout_seconds", default=45))
-    failures = {}
+    failures: list[Attempt] = []
+    total = len(candidates)
 
-    # 3. 纯粹的顺序优先级调度 + 链式故障转移
-    for cand in candidates:
+    # 2. 顺序优先级调度 + 链式故障转移
+    for idx, cand in enumerate(candidates):
         rules = config_mgr.get_image_adapter_rules(cand["provider"])
+        tag = f"{cand['provider']}/{cand['model']}"
         if action == "edit" and not rules.get("supports_edit", True):
             continue
         if mask_b64 and not rules.get("supports_mask", cand["provider"] == "google"):
-            failures[f"{cand['provider']}/{cand['model']}"] = "不支持 mask 局部重绘，已跳过"
+            failures.append(Attempt(target=tag, error="不支持 mask 局部重绘，已跳过"))
             continue
-        tag = f"{cand['provider']}/{cand['model']}"
+        await _progress(ctx, idx, total, f"正在调用 {tag}")
         try:
             raw = await asyncio.wait_for(
                 execute_image_generation(
@@ -842,94 +879,110 @@ async def generate_image(
                 timeout=timeout_sec
             )
             if raw:
-                # 自动将生成的图片持久化存储至 static/generated/ 目录
-                for img_item in raw:
-                    if "b64" in img_item:
-                        saved_meta = save_generated_image_to_disk(img_item["b64"], img_item.get("mime", "image/png"))
-                        if saved_meta:
-                            img_item["saved_path"] = saved_meta.get("saved_path")
-                            img_item["relative_url"] = saved_meta.get("relative_url")
-                            logger.info(f"生图已持久化: {saved_meta.get('relative_url')} ({saved_meta.get('size_bytes')} 字节)")
-                return to_mcp_images(raw)
+                images, blocks = _build_generation_content(raw)
+                if not images:
+                    raise RuntimeError("上游未返回可解析的图像数据")
+                await _progress(ctx, total, total, "完成")
+                result = GenerationResult(
+                    provider=cand["provider"], model=cand["model"], images=images,
+                    aspect_ratio=target_aspect, resolution=str(target_res), scene=active_scene,
+                    seed=seed, elapsed_ms=int((time.monotonic() - started) * 1000),
+                    failed_attempts=failures,
+                )
+                lines = [f"已由 {tag} 生成 {len(images)} 张图片（{target_aspect}, {target_res}）。"]
+                for n, im in enumerate(images, 1):
+                    lines.append(f"{n}. {im.url or im.filename}" + (f" ({im.width}x{im.height})" if im.width else ""))
+                if failures:
+                    lines.append("已跳过: " + "; ".join(f"{a.target}: {a.error}" for a in failures))
+                return _tool_result("\n".join(lines), result, blocks)
         except asyncio.TimeoutError:
-            failures[tag] = f"请求超时 ({timeout_sec}s)"
-            logger.warning(f"生图模型 {tag} 响应超时，自动切换下一优先级备用模型...")
+            failures.append(Attempt(target=tag, error=f"请求超时 ({timeout_sec:.0f}s)"))
+            logger.warning(f"生图模型 {tag} 响应超时，切换下一优先级模型...")
         except Exception as e:
-            failures[tag] = str(e)
-            logger.warning(f"生图模型 {tag} 执行失败: {e}，自动切换下一优先级备用模型...")
+            failures.append(Attempt(target=tag, error=sanitize_error(e)))
+            logger.warning(f"生图模型 {tag} 执行失败: {sanitize_error(e)}，切换下一优先级模型...")
 
-    raise RuntimeError(f"所有可用生图模型均执行失败: {failures}")
+    detail = "; ".join(f"{a.target}: {a.error}" for a in failures) or "没有支持该操作的模型"
+    raise RuntimeError(f"所有可用生图模型均执行失败: {detail}")
 
 
-@mcp.tool()
+@mcp.tool(annotations=_annotations(read_only=False, title="编辑图片"))
 async def edit_image(
     image: str,
     prompt: str,
     mask: str = "",
-    scene: str = "auto",
-    aspect_ratio: str = "auto",
-    resolution: str = "auto",
+    aspect_ratio: AspectRatio = "auto",
+    resolution: Resolution = "auto",
     negative_prompt: str = "",
     seed: int = -1,
-    count: int = 1,
+    count: Annotated[int, Field(ge=1, le=4)] = 1,
     model: str = "",
-    provider: str = ""
-) -> list:
-    """对已有图像进行编辑、重绘或主体参考图生图（快速入口）。
+    ctx: Optional[Context] = None,
+) -> Annotated[mcp_types.CallToolResult, GenerationResult]:
+    """用 AI 编辑已有图片：改风格、增删元素、以原图为参考重绘。
 
     参数说明:
-        image: 待编辑原图，支持公网 URL、本地文件绝对路径或 Base64。
-        prompt: 编辑指令。
-        mask: 可选，局部重绘蒙版。仅路由到声明支持 mask 的模型（当前默认 Google）。
-        count: 生成张数 (默认为 1)。
+        image: 原图，公网 URL 或 Base64 / data URI。
+        prompt: 编辑指令，例如“把背景换成海边日落”。
+        mask: 可选，局部重绘蒙版（白色区域为重绘区），只会路由到支持 mask 的模型。
         其余参数同 generate_image。
     """
     return await generate_image(
-        prompt=prompt,
-        action="edit",
-        image=image,
-        mask=mask,
-        count=count,
-        scene=scene,
-        aspect_ratio=aspect_ratio,
-        resolution=resolution,
-        negative_prompt=negative_prompt,
-        seed=seed,
-        model=model,
-        provider=provider
+        prompt=prompt, action="edit", image=image, mask=mask, scene="none",
+        aspect_ratio=aspect_ratio, resolution=resolution, negative_prompt=negative_prompt,
+        seed=seed, count=count, model=model, ctx=ctx,
     )
 
 
 # ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
 # MCP 核心工具 2: 识图与分级 OCR (顺序优先级调度 + 链式故障转移)
 # ---------------------------------------------------------------------------
-@mcp.tool()
-async def describe_image(
-    image: str,
-    prompt: str = "提取图中的全部文字内容并进行详细结构化分析",
-    preset: str = "",
-    model: str = "",
-    provider: str = ""
-) -> str:
-    """视觉识别与多级 OCR 分析工具。默认采用后台配置的顺序优先级调度与自动故障转移。
+GUI_INSTRUCTION = (
+    "你是一个界面自动化定位助手。识别画面中所有可交互元素（按钮、输入框、链接、开关、菜单项等）。"
+    "只输出一个 JSON 数组，不要任何解释或 Markdown 代码块，每项格式为："
+    '{"label": "元素文字或用途", "type": "button|input|link|checkbox|menu|other", "box": [ymin, xmin, ymax, xmax]}，'
+    "坐标为 0~1000 的整数归一化坐标。"
+)
+DOCUMENT_INSTRUCTION = (
+    "你是一个高精度文档与表格解析专家。请将图片中的所有文字、数据、财务报表提取为标准 GitHub Flavored Markdown (GFM)，"
+    "表格用 GFM 表格，严格保留列对齐、数字精度和层次标题结构。"
+)
 
-    参数说明:
-        image: 目标图片，支持公网 URL、本地文件绝对路径或 Base64。
-        prompt: 分析要求或引导词。
-        preset: 识别等级，可选 "fast"(本地极速纯文本) | "standard"(默认通用多模态) | "document"(高精文档与表格) | "gui"(界面定位)。
-        model: 可选，显式指定识图模型 ID（留空则默认按后台配置顺序调度第 1 个主力模型）。
-        provider: 可选，显式指定模型提供商。
-    """
-    client: httpx.AsyncClient = getattr(mcp, "_http_client", None)
-    if not client:
-        raise RuntimeError("HTTP 客户端未启动")
 
-    image_b64 = await resolve_image_to_base64(client, image)
+def parse_gui_elements(text: str) -> Optional[list[UIElement]]:
+    """从模型输出中解析 GUI 元素 JSON，并把坐标钳制在 0~1000。解析失败返回 None。"""
+    m = re.search(r"\[\s*\{.*\}\s*\]", text or "", re.S)
+    if not m:
+        return None
+    try:
+        data = json.loads(m.group(0))
+    except json.JSONDecodeError:
+        return None
+    out: list[UIElement] = []
+    for item in data if isinstance(data, list) else []:
+        box = item.get("box") if isinstance(item, dict) else None
+        if not (isinstance(box, list) and len(box) == 4):
+            continue
+        try:
+            y1, x1, y2, x2 = [max(0, min(1000, int(round(float(v))))) for v in box]
+        except (TypeError, ValueError):
+            continue
+        y1, y2 = sorted((y1, y2))
+        x1, x2 = sorted((x1, x2))
+        out.append(UIElement(
+            label=str(item.get("label", ""))[:200], type=str(item.get("type", ""))[:32],
+            box=[y1, x1, y2, x2], center=[(y1 + y2) // 2, (x1 + x2) // 2],
+        ))
+    return out
+
+
+async def _describe(
+    client: httpx.AsyncClient, image_b64: str, prompt: str, preset: str, model: str, ctx=None
+) -> VisionResult:
     active_preset = preset.strip() or config_mgr.get("vision", "default_preset", default="standard")
-    logger.info(f"describe_image: preset={active_preset}, prompt={prompt[:40]}...")
+    logger.info(f"describe_image: preset={active_preset}")
 
-    # 等级 1: fast - 本地极速纯文本 (RapidOCR)
+    # 等级 1: fast - 本地 RapidOCR，失败或为空时降级云端
     if active_preset == "fast" and config_mgr.get("vision", "rapidocr_enabled", default=True):
         try:
             ocr_engine = get_rapidocr_engine()
@@ -937,17 +990,12 @@ async def describe_image(
             # ONNX 推理为同步 CPU 计算，放入线程池避免阻塞事件循环
             result, _ = await asyncio.get_running_loop().run_in_executor(None, ocr_engine, raw_bytes)
             if result:
-                lines = [f"- {item[1]} (置信度: {item[2]:.2f})" for item in result]
-                return "### 极速 OCR 提取结果 (本地 RapidOCR 引擎):\n\n" + "\n".join(lines)
+                text = "\n".join(item[1] for item in result)
+                return VisionResult(text=text, preset="fast", engine="rapidocr")
         except Exception as e:
-            logger.warning(f"本地 RapidOCR 执行失败或未安装，平滑降级至云端多模态模型池: {e}")
+            logger.warning(f"本地 RapidOCR 不可用，降级至云端多模态模型池: {sanitize_error(e)}")
 
-    system_instruction = ""
-    if active_preset == "document":
-        system_instruction = "你是一个高精度文档与表格解析专家。请将图片中的所有文字、数据、财务报表提取为标准 GitHub Flavored Markdown (GFM) 表格，严格保留列对齐、数字精度和层次标题结构。"
-    elif active_preset == "gui":
-        system_instruction = "你是一个界面自动化定位助手。请识别画面中的按钮、输入框、可点击元素，并以 [ymin, xmin, ymax, xmax] (0~1000 归一化坐标) 格式标注出所有元素的位置和中心点。"
-
+    system_instruction = {"document": DOCUMENT_INSTRUCTION, "gui": GUI_INSTRUCTION}.get(active_preset, "")
     full_prompt = f"{system_instruction}\n\n用户要求: {prompt}".strip()
 
     vision_models = [
@@ -957,27 +1005,12 @@ async def describe_image(
     if not vision_models:
         raise RuntimeError("当前未绑定任何多模态识图模型，请在 Web 管理端 (/admin) 挂载识图模型")
 
-    # 1. 候选排序：若显式指定了 model 或 provider，优先调度
-    target = (model or provider).strip().lower()
-    if target:
-        chosen = None
-        remaining = []
-        for m in vision_models:
-            m_id = m.get("model", "").lower()
-            p_id = m.get("provider", "").lower()
-            if not chosen and (target == m_id or target in m_id or target == p_id):
-                chosen = m
-            else:
-                remaining.append(m)
-        candidates = [chosen] + remaining if chosen else vision_models
-    else:
-        # 默认按后台物理顺序（第 1 个为主节点）
-        candidates = list(vision_models)
-
+    candidates = _pick_candidates(vision_models, model)
     timeout_sec = float(config_mgr.get("vision", "timeout_seconds", default=45))
-    errors = []
-    for vm in candidates:
+    failures: list[Attempt] = []
+    for idx, vm in enumerate(candidates):
         tag = f"{vm.get('provider')}/{vm.get('model')}"
+        await _progress(ctx, idx, len(candidates), f"正在调用 {tag}")
         try:
             res_text = await asyncio.wait_for(
                 execute_vision_completion(
@@ -992,47 +1025,54 @@ async def describe_image(
                 timeout=timeout_sec
             )
             if res_text:
-                return res_text
+                elements = parse_gui_elements(res_text) if active_preset == "gui" else None
+                return VisionResult(
+                    text=res_text, preset=active_preset, engine=tag, elements=elements, failed_attempts=failures,
+                )
         except asyncio.TimeoutError:
-            err_msg = f"{tag}: 请求超时 ({timeout_sec}s)"
-            errors.append(err_msg)
-            logger.warning(f"识图节点超时故障转移: {err_msg}")
+            failures.append(Attempt(target=tag, error=f"请求超时 ({timeout_sec:.0f}s)"))
+            logger.warning(f"识图节点 {tag} 超时，故障转移")
         except Exception as e:
-            err_msg = f"{tag}: {e}"
-            errors.append(err_msg)
-            logger.warning(f"识图节点异常故障转移: {err_msg}")
+            failures.append(Attempt(target=tag, error=sanitize_error(e)))
+            logger.warning(f"识图节点 {tag} 异常，故障转移: {sanitize_error(e)}")
 
-    raise RuntimeError(f"所有识图与 OCR 模型节点均执行失败: {'; '.join(errors)}")
+    raise RuntimeError("所有识图与 OCR 模型节点均执行失败: " + "; ".join(f"{a.target}: {a.error}" for a in failures))
 
 
-# ---------------------------------------------------------------------------
-# MCP 核心工具 3: 搜图 (文字搜图 + 联动已有 OCR 语义以图搜图)
-# ---------------------------------------------------------------------------
-@mcp.tool()
-async def search_images(
-    query: str = "",
-    image: str = "",
-    size: str = "all",
-    aspect_ratio: str = "all",
-    limit: int = 6
-) -> str:
-    """全网高质量图片搜索工具（支持文字搜图与以图搜图）。"""
+@mcp.tool(annotations=_annotations(read_only=True, title="识图与 OCR"))
+async def describe_image(
+    image: str,
+    prompt: str = "提取图中的全部文字内容并进行详细结构化分析",
+    preset: VisionPreset = "",
+    model: str = "",
+    ctx: Optional[Context] = None,
+) -> Annotated[mcp_types.CallToolResult, VisionResult]:
+    """看图、OCR 提取文字、解析文档表格、定位界面元素。
+
+    参数说明:
+        image: 公网 URL 或 Base64 / data URI。
+        prompt: 分析要求。
+        preset: ""(跟随后台，默认 standard) | "fast"(本地 OCR，只要纯文字时最快最省) |
+                "standard"(通用理解) | "document"(文档/表格转 Markdown) |
+                "gui"(界面元素定位，structuredContent.elements 返回 0~1000 归一化坐标与中心点)。
+        model: 可选，指定模型，格式 "provider/model"、模型 ID 或 provider 名。
+    """
     client: httpx.AsyncClient = getattr(mcp, "_http_client", None)
     if not client:
         raise RuntimeError("HTTP 客户端未启动")
+    image_b64 = await resolve_image_to_base64(client, image)
+    result = await _describe(client, image_b64, prompt, preset, model, ctx)
+    text = result.text
+    if result.preset == "gui" and result.elements is None:
+        text += "\n\n（注意：未能把输出解析为结构化元素列表，elements 为空）"
+    return _tool_result(text, result)
 
-    actual_query = query.strip()
 
-    if image and not actual_query:
-        logger.info("以图搜图模式: 联动内部识图/OCR 引擎抽取特征词...")
-        extract_prompt = "请用 3 到 6 个最精准的核心实体与视觉关键词概括这张图片的主体（如品牌型号、物体名称、艺术风格），直接输出关键词，用空格分隔，不要任何额外解释。"
-        visual_keywords = await describe_image(image=image, prompt=extract_prompt, preset="standard")
-        actual_query = visual_keywords.replace("\n", " ").replace("#", "").strip()
-        logger.info(f"以图搜图自动生成检索词: {actual_query}")
-
-    if not actual_query:
-        raise ValueError("请提供搜索关键词 (query) 或待搜寻的参考图片 (image)")
-
+# ---------------------------------------------------------------------------
+# MCP 核心工具 3: 搜图
+# ---------------------------------------------------------------------------
+async def _search_by_text(client: httpx.AsyncClient, actual_query: str, size: str, aspect_ratio: str, limit: int) -> list[dict]:
+    """依次尝试 DuckDuckGo → Bing → Pexels，返回统一结构的结果列表。"""
     results = []
 
     # 引擎 1: DuckDuckGo Images
@@ -1061,6 +1101,7 @@ async def search_images(
                 "thumbnail_url": r.get("thumbnail"),
                 "width": r.get("width"),
                 "height": r.get("height"),
+                "page_url": r.get("url"),
                 "source": "duckduckgo.com"
             })
     except Exception as e:
@@ -1112,37 +1153,78 @@ async def search_images(
                         "thumbnail_url": src.get("medium"),
                         "width": photo.get("width"),
                         "height": photo.get("height"),
+                        "page_url": photo.get("url"),
                         "source": "pexels.com"
                     })
         except Exception as e:
             logger.warning(f"Pexels 搜图失败: {e}")
 
-    if not results:
-        return f"未检索到与 '{actual_query}' 相关的图片，请尝试更换关键词。"
+    return results[:limit]
 
-    card_items = []
-    for idx, item in enumerate(results, 1):
-        thumb = item.get("thumbnail_url") or item.get("image_url")
-        orig = item.get("image_url")
-        title = item.get("title")
-        w, h = item.get("width"), item.get("height")
-        src = item.get("source")
-        dim_str = f"{w}x{h}" if w and h else "高分辨率"
-        card_items.append(
-            f"{idx}. **[{title}]({orig})**\n"
-            f"   [![{title}]({thumb})]({orig})\n"
-            f"   - 规格: {dim_str} | 来源: {src}"
+
+@mcp.tool(annotations=_annotations(read_only=True, title="搜图"))
+async def search_images(
+    query: str = "",
+    image: str = "",
+    size: Literal["all", "large", "wallpaper"] = "all",
+    aspect_ratio: Literal["all", "square", "wide", "tall"] = "all",
+    limit: Annotated[int, Field(ge=1, le=20)] = 6,
+    ctx: Optional[Context] = None,
+) -> Annotated[mcp_types.CallToolResult, SearchResult]:
+    """全网搜图。传 query 按文字搜；只传 image 时先识别图片关键词再按关键词搜相似主题图片。
+
+    参数说明:
+        query: 搜索关键词。
+        image: 参考图（公网 URL 或 Base64）。
+        size / aspect_ratio: 尺寸与版式过滤（DuckDuckGo 引擎生效）。
+        limit: 返回条数 1~20。
+    """
+    client: httpx.AsyncClient = getattr(mcp, "_http_client", None)
+    if not client:
+        raise RuntimeError("HTTP 客户端未启动")
+
+    actual_query = query.strip()
+    mode = "text"
+    if image and not actual_query:
+        mode = "reverse_keywords"
+        image_b64 = await resolve_image_to_base64(client, image)
+        extract_prompt = "请用 3 到 6 个最精准的核心实体与视觉关键词概括这张图片的主体（如品牌型号、物体名称、艺术风格），直接输出关键词，用空格分隔，不要任何额外解释。"
+        vr = await _describe(client, image_b64, extract_prompt, "standard", "", ctx)
+        actual_query = vr.text.replace("\n", " ").replace("#", "").strip()[:120]
+        logger.info(f"以图搜图自动生成检索词: {actual_query}")
+
+    if not actual_query:
+        raise ValueError("请提供搜索关键词 (query) 或参考图片 (image)")
+
+    raw = await _search_by_text(client, actual_query, size, aspect_ratio, limit)
+    hits = [
+        ImageHit(
+            title=str(r.get("title") or actual_query)[:200],
+            image_url=r["image_url"],
+            thumbnail_url=r.get("thumbnail_url"),
+            page_url=r.get("page_url"),
+            width=r.get("width") if isinstance(r.get("width"), int) else None,
+            height=r.get("height") if isinstance(r.get("height"), int) else None,
+            source=r.get("source", ""),
         )
+        for r in raw if r.get("image_url")
+    ]
+    result = SearchResult(query=actual_query, mode=mode, results=hits)
+    if not hits:
+        return _tool_result(f"未检索到与 '{actual_query}' 相关的图片，请尝试更换关键词。", result)
 
-    header = f"### 搜图结果 (检索词: '{actual_query}'，共找到 {len(results)} 张高清图片)：\n\n"
-    return header + "\n\n".join(card_items)
+    lines = [f"搜图结果（检索词: '{actual_query}'，{len(hits)} 张）:"]
+    for n, h in enumerate(hits, 1):
+        dim = f"{h.width}x{h.height}" if h.width and h.height else "尺寸未知"
+        lines.append(f"{n}. {h.title} | {dim} | {h.source}\n   {h.image_url}")
+    return _tool_result("\n".join(lines), result)
 
 
 # ---------------------------------------------------------------------------
 # 辅助工具: 提示词增强与能力列表
 # ---------------------------------------------------------------------------
-@mcp.tool()
-async def enhance_prompt(prompt: str, style: str = "realistic", purpose: str = "general") -> str:
+@mcp.tool(annotations=_annotations(read_only=True, title="提示词增强"))
+async def enhance_prompt(prompt: str, style: str = "realistic", purpose: Literal["general", "work"] = "general") -> str:
     """根据目标风格与用途自动优化扩展绘图提示词。
 
     参数说明:
@@ -1185,7 +1267,7 @@ async def enhance_prompt(prompt: str, style: str = "realistic", purpose: str = "
     return prompt
 
 
-@mcp.tool()
+@mcp.tool(annotations=_annotations(read_only=True, open_world=False, idempotent=True, title="模型与配置查询"))
 async def list_models() -> dict:
     """查询当前系统在本地已持久化的供应商、生图模型池、识图模型池、办公场景模板及运行配置。"""
     cfg = config_mgr.get_all()
@@ -1193,7 +1275,6 @@ async def list_models() -> dict:
     return {
         "service": "KHC Image MCP Suite",
         "version": "3.0",
-        "edgeone_vault_url": (cfg.get("edgeone_vault") or {}).get("url", ""),
         "local_providers": [
             {
                 "id": pid,
@@ -1213,9 +1294,15 @@ async def list_models() -> dict:
             {"id": sid, "name": sinfo["name"], "description": sinfo["description"]}
             for sid, sinfo in SCENE_PRESETS.items()
         ],
-        "generation_models": cfg.get("generation", {}).get("models", []),
+        "generation_models": [
+            {k: m.get(k) for k in ("provider", "model", "role", "enabled")}
+            for m in cfg.get("generation", {}).get("models", []) if isinstance(m, dict)
+        ],
         "current_ocr_preset": cfg.get("vision", {}).get("default_preset", "standard"),
-        "vision_models": cfg.get("vision", {}).get("models", []),
+        "vision_models": [
+            {k: m.get(k) for k in ("provider", "model", "role", "enabled")}
+            for m in cfg.get("vision", {}).get("models", []) if isinstance(m, dict)
+        ],
         "current_search_engine": cfg.get("search", {}).get("default_text_engine", "duckduckgo")
     }
 
@@ -1675,12 +1762,27 @@ async def search_test_api(request) -> Response:
         body = {}
     query = (body.get("query") or "").strip()
     image = (body.get("image") or "").strip()
-    limit = int(body.get("limit") or 6)
+    limit = max(1, min(int(body.get("limit") or 6), 20))
     try:
-        res_md = await search_images(query=query, image=image, limit=limit)
-        return JSONResponse({"ok": True, "markdown": res_md})
+        res = await search_images(query=query, image=image, limit=limit)
+        data = res.structuredContent if hasattr(res, "structuredContent") else res.structured_content
+        hits = data.get("results", [])
+        if not hits:
+            md = f"未检索到与 '{data.get('query')}' 相关的图片，请尝试更换关键词。"
+        else:
+            cards = []
+            for idx, h in enumerate(hits, 1):
+                thumb = h.get("thumbnail_url") or h["image_url"]
+                dim = f"{h['width']}x{h['height']}" if h.get("width") and h.get("height") else "高分辨率"
+                cards.append(
+                    f"{idx}. **[{h['title']}]({h['image_url']})**\n"
+                    f"   [![{h['title']}]({thumb})]({h['image_url']})\n"
+                    f"   - 规格: {dim} | 来源: {h['source']}"
+                )
+            md = f"### 搜图结果 (检索词: '{data.get('query')}'，共找到 {len(hits)} 张图片)：\n\n" + "\n\n".join(cards)
+        return JSONResponse({"ok": True, "markdown": md, "data": data})
     except Exception as e:
-        return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
+        return JSONResponse({"ok": False, "error": sanitize_error(e)}, status_code=400)
 
 
 # ---------------------------------------------------------------------------
@@ -1694,19 +1796,34 @@ async def app_lifespan(app):
         app.state.http_client = client
         mcp._http_client = client
         logger.info("HTTP 连接池已启动 (KHC Image MCP Suite)")
-        if hasattr(mcp, "session_manager"):
-            logger.info("启动 MCP Session Manager")
-            async with mcp.session_manager.run():
+        security.get_signing_secret(config_mgr)
+        if config_mgr.admin_token_conflicts():
+            logger.error("Admin Token 与 MCP 客户端 Token 相同，管理面已禁用。请设置独立的 ADMIN_TOKEN。")
+        if not security.load_client_tokens(config_mgr):
+            logger.warning("未配置任何 MCP 客户端 Token (CLIENT_AUTH_TOKEN / auth.client_tokens)，/mcp 将拒绝所有请求")
+        if not storage.public_base_url(config_mgr):
+            logger.warning("未配置 PUBLIC_BASE_URL / server.public_base_url，生图结果将以内联 Base64 返回")
+        cleanup_task = asyncio.create_task(storage.cleanup_loop(config_mgr))
+        try:
+            if hasattr(mcp, "session_manager"):
+                logger.info("启动 MCP Session Manager")
+                async with mcp.session_manager.run():
+                    yield
+            else:
                 yield
-        else:
-            yield
+        finally:
+            cleanup_task.cancel()
     logger.info("HTTP 连接池已释放 (KHC Image MCP Suite)")
+
+
+async def files_endpoint(request) -> Response:
+    return await storage.serve_file(request, config_mgr)
 
 
 static_dir = Path(__file__).resolve().parent / "static"
 
-if __name__ == "__main__":
-    port = int(os.environ.get("MCP_SERVER_PORT", "3002"))
+def create_app():
+    """构建完整 ASGI 应用（便于测试与多入口复用）。"""
 
     ts_settings = None
     try:
@@ -1747,7 +1864,8 @@ if __name__ == "__main__":
         Route("/api/vault/fetch-key", endpoint=vault_fetch_key_api, methods=["POST"]),
         Route("/api/vault/sync", endpoint=vault_sync_api, methods=["POST"]),
         Route("/api/vault/probe-models", endpoint=vault_probe_models_api, methods=["POST"]),
-        Mount("/mcp", app=unified_mcp_app),
+        Route("/files/{rel_path:path}", endpoint=files_endpoint, methods=["GET", "HEAD"]),
+        Mount("/mcp", app=security.make_mcp_auth_middleware(unified_mcp_app, config_mgr)),
     ]
 
     if static_dir.exists():
@@ -1762,6 +1880,10 @@ if __name__ == "__main__":
                 scope = dict(scope, path="/mcp/", raw_path=b"/mcp/")
 
             path = scope.get("path", "")
+            if path.startswith("/static/generated"):
+                # 旧版生图目录不再公开，统一走 /files 签名链接
+                await JSONResponse({"error": "Not Found"}, status_code=404)(scope, receive, send)
+                return
             if path.startswith("/static/") or path in ("/admin", "/api/config", "/api/presets"):
                 async def send_wrapper(message):
                     if message["type"] == "http.response.start":
@@ -1778,5 +1900,10 @@ if __name__ == "__main__":
         await app(scope, receive, send)
 
 
+    return mcp_normalize_middleware
+
+
+if __name__ == "__main__":
+    port = int(os.environ.get("MCP_SERVER_PORT", "3002"))
     logger.info(f"Image MCP Suite 启动在端口 {port}...")
-    uvicorn.run(mcp_normalize_middleware, host="127.0.0.1", port=port, proxy_headers=True, forwarded_allow_ips="*")
+    uvicorn.run(create_app(), host="127.0.0.1", port=port, proxy_headers=True, forwarded_allow_ips="127.0.0.1")

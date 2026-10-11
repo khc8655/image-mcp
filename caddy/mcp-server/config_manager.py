@@ -6,6 +6,7 @@ Config Manager for KHC Image MCP Suite
 
 import json
 import os
+import secrets
 import copy
 import logging
 from pathlib import Path
@@ -107,7 +108,16 @@ DEFAULT_VISION_ADAPTER_RULES: Dict[str, Dict[str, Any]] = {
 
 DEFAULT_CONFIG: Dict[str, Any] = {
     "auth": {
-        "admin_token": os.environ.get("ADMIN_TOKEN", os.environ.get("CLIENT_AUTH_TOKEN", ""))
+        # 管理面 Token：只认 ADMIN_TOKEN，不再回退到 CLIENT_AUTH_TOKEN（调用面与管理面分离）
+        "admin_token": os.environ.get("ADMIN_TOKEN", ""),
+        # 调用面 Token 列表：[{"name": "cursor", "token": "...", "enabled": true, "rpm": 60}]
+        "client_tokens": [],
+        "default_rpm": 120,
+        "signing_secret": ""
+    },
+    "server": {
+        # 生图结果签名 URL 的公网前缀，例如 https://oc.khc6.cn ；为空时生图结果回退为内联 Base64
+        "public_base_url": os.environ.get("PUBLIC_BASE_URL", "")
     },
     "edgeone_vault": {
         "url": os.environ.get("EDGEONE_VAULT_URL", "https://api.khc6.cn"),
@@ -118,6 +128,9 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "default_mode": "sequential",  # sequential
         "timeout_seconds": 45,
         "fallback_enabled": True,
+        "return_mode": "url",      # url: 签名 URL + 缩略图 | inline: 原图 Base64
+        "url_ttl_hours": 24,
+        "retention_days": 7,
         "models": []
     },
     "vision": {
@@ -147,6 +160,7 @@ def _mask_secret(val: str) -> str:
 
 class ConfigManager:
     def __init__(self, config_path: str = None):
+        config_path = config_path or os.environ.get("IMAGE_MCP_CONFIG")
         if config_path:
             self.config_path = Path(config_path)
         else:
@@ -171,7 +185,20 @@ class ConfigManager:
                 logger.error(f"Failed to load {self.config_path}: {e}, using defaults")
         else:
             self.save()
+        self._ensure_admin_token()
         return self._config
+
+    def _ensure_admin_token(self) -> None:
+        """环境变量 ADMIN_TOKEN 优先于磁盘；均为空时生成随机 Token 并持久化。"""
+        env_admin = os.environ.get("ADMIN_TOKEN", "").strip()
+        auth = self._config.setdefault("auth", {})
+        if env_admin and auth.get("admin_token") != env_admin:
+            auth["admin_token"] = env_admin
+            self.save()
+        if not auth.get("admin_token"):
+            auth["admin_token"] = secrets.token_urlsafe(32)
+            self.save()
+            logger.warning(f"未配置 ADMIN_TOKEN，已生成随机 Admin Token 并写入 {self.config_path} (auth.admin_token)")
 
     def _migrate_legacy_credentials(self, disk_config: Dict[str, Any]) -> bool:
         """将旧版零散的 credentials 迁移至统一的本地 providers + 模型绑定池结构"""
@@ -496,6 +523,31 @@ class ConfigManager:
             if isinstance(tk, str) and ("*" in tk or tk.strip() == ""):
                 vault_in["token"] = self.get("edgeone_vault", "token", default="")
 
+        # 1.5 保护 auth：掩码 / 空值不覆盖；签名密钥不允许经 Web 修改
+        auth_in = data_copy.get("auth")
+        if isinstance(auth_in, dict):
+            auth_in.pop("signing_secret", None)
+            at = auth_in.get("admin_token", "")
+            if not isinstance(at, str) or "*" in at or not at.strip():
+                auth_in.pop("admin_token", None)
+            if isinstance(auth_in.get("client_tokens"), list):
+                old_by_name = {
+                    t.get("name"): t.get("token")
+                    for t in (self.get("auth", "client_tokens", default=[]) or []) if isinstance(t, dict)
+                }
+                merged = []
+                for t in auth_in["client_tokens"]:
+                    if not isinstance(t, dict) or not t.get("name"):
+                        continue
+                    tk = t.get("token", "")
+                    if not isinstance(tk, str) or "*" in tk or not tk.strip():
+                        if not old_by_name.get(t["name"]):
+                            continue
+                        t["token"] = old_by_name[t["name"]]
+                    merged.append(t)
+                self._config.setdefault("auth", {})["client_tokens"] = merged
+                auth_in.pop("client_tokens")
+
         # 2. 保护 search.pexels_api_key
         search_in = data_copy.get("search")
         if isinstance(search_in, dict):
@@ -549,6 +601,15 @@ class ConfigManager:
             vault["has_token"] = bool(raw_tk)
             vault["token"] = _mask_secret(raw_tk)
 
+        # 脱敏管理面 / 调用面 Token，签名密钥不下发
+        auth = safe_copy.get("auth", {})
+        if isinstance(auth, dict):
+            auth["admin_token"] = _mask_secret(auth.get("admin_token", ""))
+            auth.pop("signing_secret", None)
+            for item in auth.get("client_tokens") or []:
+                if isinstance(item, dict):
+                    item["token"] = _mask_secret(item.get("token", ""))
+
         # 脱敏 Pexels API Key
         search = safe_copy.get("search", {})
         if isinstance(search, dict) and search.get("pexels_api_key"):
@@ -594,11 +655,28 @@ class ConfigManager:
 
         return safe_copy
 
+    def admin_token_conflicts(self) -> bool:
+        """Admin Token 与任一客户端 Token 相同即视为冲突，此时禁用管理面。"""
+        from security import load_client_tokens, constant_eq
+        admin_token = self.get("auth", "admin_token", default="")
+        return any(constant_eq(admin_token, t["token"]) for t in load_client_tokens(self))
+
     def verify_token(self, token: str) -> bool:
-        admin_token = self.get("auth", "admin_token")
+        from security import constant_eq
+        admin_token = self.get("auth", "admin_token", default="")
         if not admin_token or not token:
             return False
-        return token.strip() == admin_token.strip()
+        if self.admin_token_conflicts():
+            logger.error("Admin Token 与 MCP 客户端 Token 相同，管理面已禁用。请设置独立的 ADMIN_TOKEN 环境变量后重启。")
+            return False
+        return constant_eq(token, admin_token)
+
+    def set_value(self, path: tuple, value: Any) -> bool:
+        curr = self._config
+        for k in path[:-1]:
+            curr = curr.setdefault(k, {})
+        curr[path[-1]] = value
+        return self.save()
 
     def _deep_update(self, base: dict, override: dict) -> None:
         for k, v in override.items():

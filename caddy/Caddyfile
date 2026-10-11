@@ -6,7 +6,7 @@
 :3000 {
 	# ── 1. Web 管理控制台与静态资源 (/admin*, /static*, /api*) ──
 	@admin_routes {
-		path /admin /admin/* /static/* /api/*
+		path /admin /admin/* /static/* /api/* /files/*
 	}
 	handle @admin_routes {
 		header Cache-Control "no-cache, no-store, must-revalidate"
@@ -29,25 +29,21 @@
 		respond "" 204
 	}
 
-	# ── 3. MCP Server 实际业务请求 — 需 Bearer 鉴权 ──
+	# ── 3. MCP Server 实际业务请求 ──
+	# Bearer 鉴权与按客户端限流已下沉到应用层 (security.py)，支持多客户端 Token 独立吊销；
+	# 应用未配置任何客户端 Token 时默认拒绝所有请求。
 	@mcp_path {
 		path /mcp /mcp/*
 		not method OPTIONS
 	}
-	@auth_mcp {
-		header Authorization "Bearer {env.CLIENT_AUTH_TOKEN}"
-	}
 	handle @mcp_path {
-		handle @auth_mcp {
-			header Access-Control-Allow-Origin "*"
-			header Access-Control-Expose-Headers "Mcp-Session-Id, Mcp-Protocol-Version"
-			reverse_proxy 127.0.0.1:{env.MCP_SERVER_PORT} {
-				flush_interval -1
-				header_down Cache-Control "no-cache, no-transform"
-				header_down X-Accel-Buffering "no"
-			}
+		header Access-Control-Allow-Origin "*"
+		header Access-Control-Expose-Headers "Mcp-Session-Id, Mcp-Protocol-Version"
+		reverse_proxy 127.0.0.1:{env.MCP_SERVER_PORT} {
+			flush_interval -1
+			header_down Cache-Control "no-cache, no-transform"
+			header_down X-Accel-Buffering "no"
 		}
-		respond 401
 	}
 
 	# 默认拒绝未匹配路径
