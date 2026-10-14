@@ -21,7 +21,7 @@ except ImportError:  # mcp 1.x
     from mcp.server.fastmcp import FastMCP, Image, Context  # noqa: F401
 
 SERVER_START_TIME = time.time()
-APP_VERSION = "3.1.0"
+APP_VERSION = "3.2.0"
 
 
 # ---------------------------------------------------------------------------

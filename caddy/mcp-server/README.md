@@ -172,7 +172,7 @@ caddy/mcp-server/
 4. **单测数据隔离**：
    - `scratch/test_e2e_flow.py` 使用独立临时测试文件 `test_config.json` 进行全流程验证并在结束后自动销毁，彻底杜绝污染生产 `config.json`。
 
-### 3.5 Agent 优先的生图（v3.1，取代 v3.0 场景模板与 enhance_prompt）
+### 3.5 Agent 优先的生图（v3.2，取代 v3.0 场景模板与 enhance_prompt）
 - 提示词由调用方 Agent 撰写并原样发送给 Gemini；服务端不再拼接 SD 风格前后缀，也不再提供 `negative_prompt` / `seed` / `scene` / `model` 参数（Gemini 不支持负向提示词，模型顺序由后台决定）。
 - Agent 未传的 `aspect_ratio` / `resolution` / `quality` / `grounding` / `count` 走后台 `generation.default_*`。
 - `quality=best`：Pro 级模型提前并开启 `thinkingLevel=high`；`grounding=true`：Gemini 请求带 `googleSearch` 工具。上游拒绝这两个增强项（400）时自动去掉重试一次。

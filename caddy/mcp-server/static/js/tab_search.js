@@ -1,6 +1,6 @@
 // 搜图业务与在线测试微模块
-import { esc, showToast } from './common.js?v=3.1.0';
-import { api } from './api.js?v=3.1.0';
+import { esc, showToast } from './common.js?v=3.2.0';
+import { api } from './api.js?v=3.2.0';
 
 
 export function renderSearchTab(appConfig) {

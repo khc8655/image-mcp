@@ -23,7 +23,7 @@
 ```mermaid
 graph TD
     PR["提交代码 / PR"] --> G1["L1: 后端代码规范与静态检查<br/>(ruff check . 零报错)"]
-    G1 --> G2["L2: 后端单元与协议契约测试<br/>(pytest 全量通过 36/36)"]
+    G1 --> G2["L2: 后端单元与协议契约测试<br/>(pytest 全量通过 48/48)"]
     G2 --> G3["L3: 外部端与前端 DOM 冒烟<br/>(JS 符号绑定 / HTML 平衡 / 磁盘管理 UI / stdio 握手)"]
     G3 --> G4["L4: 自动化 CI 与多版本容器门禁<br/>(Python 3.11/3.12 矩阵 / Docker 非 root 构建)"]
     G4 --> Tag["打 Git Tag 并发布 Release"]
@@ -50,20 +50,27 @@ ruff check .
 ```bash
 pytest -v
 ```
-**强制通过项清单 (当前 36 项测试)**：
-1. **MCP 2.0.0 协议规范**：
+**强制通过项清单 (当前 48 项测试)**：
+1. **Agent 优先与多厂商生图适配 (新增 12 项测试)**：
+   - 省略参数自动继承管理后台全局默认值 (`default_quality`, `default_grounding`, `default_count`)；
+   - 显式入参优先级绝对高于后台默认值；
+   - 降级 MiniMax 时自动按标点句号截断（≤1500字符）并自动折中比例（如 4:5 → 3:4）；
+   - Gemini 内容安全拦截（`SAFETY`）直接交还改写建议给 Agent，阻断无效模型试错；
+   - `edit_image` 支持最多 13 张多图参考并绕过不支持模型；
+   - Gemini 请求体参数、搜索接地与思考等级重试及 `count > 1` 并发请求。
+2. **MCP 2.0.0 协议规范**：
    - `tools/list` 输出符合 JSON Schema，带有 `outputSchema` 与 `readOnlyHint`；
    - 工具入参采用严谨的 `Literal` 枚举；
-2. **生图与路由能力**：
+3. **生图与路由能力**：
    - 显式 `aspect_ratio`（如 `1:1`、`16:9`）不被全局模板或后台默认值覆盖；
    - 局部重绘 `mask` 仅路由至支持蒙版模型，不支持者跳过并记录安全原因；
    - 故障转移与模型降级链路正常，进度事件（`progress`）正确上报；
-3. **安全防护边界**：
+4. **安全防护边界**：
    - **SSRF 拦截矩阵**：覆盖 `127.0.0.1`、`10.0.0.0/8`、`169.254.169.254`（云元数据）、`100.64.0.0/10`（CGNAT）、`[::ffff:127.0.0.1]`；
    - **下载签名时效**：HMAC 签名下载链接在过期或篡改后返回 `403`；
    - **敏感信息清洗**：上游响应中的 `sk-...`、`Bearer`、内部密钥被自动脱敏；
    - **Token 隔离与限流**：Admin Token 与 Client Token 完全隔离（相同时自锁），多 Client Token 单独 RPM 限流 (429 Retry-After)；
-4. **存储管理与修图接口**：
+5. **存储管理与修图接口**：
    - `/api/storage/info` 正确统计磁盘占用；
    - `/api/storage/clean` 正确执行缓存释放；
    - `transform_image` 离线修图与 RapidOCR 线程池异步推理正常。

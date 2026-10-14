@@ -1,11 +1,11 @@
 // KHC Image MCP 控制台前端主入口微模块
-import { showToast, switchTab, openModal, closeModal } from './common.js?v=3.1.0';
-import { api, getStoredToken, setStoredToken } from './api.js?v=3.1.0';
-import { renderGenerationTab, selectGenMode, reorderGenModel, updateGenModelKey, updateGenModelRole, toggleGenModel, deleteGenModel, collectGenerationConfig, refreshStorageInfo, cleanStorageCache } from './tab_generation.js?v=3.1.0';
-import { renderVisionTab, selectVisMode, reorderVisionModel, updateVisionModelKey, updateVisionModelRole, toggleVisionModel, deleteVisionModel, collectVisionConfig } from './tab_vision.js?v=3.1.0';
-import { renderSearchTab, runSearchTest, collectSearchConfig } from './tab_search.js?v=3.1.0';
-import { renderSystemTab, testVaultConnectivity, syncAllVaultCredentials, saveAdminToken, collectSystemConfig } from './tab_system.js?v=3.1.0';
-import { openBindModelModal, onBindProviderChange, pickModelCard, confirmBindModel, openEditModelModal, confirmEditModel } from './modals.js?v=3.1.0';
+import { showToast, switchTab, openModal, closeModal } from './common.js?v=3.2.0';
+import { api, getStoredToken, setStoredToken } from './api.js?v=3.2.0';
+import { renderGenerationTab, selectGenMode, reorderGenModel, updateGenModelKey, updateGenModelRole, toggleGenModel, deleteGenModel, collectGenerationConfig, refreshStorageInfo, cleanStorageCache } from './tab_generation.js?v=3.2.0';
+import { renderVisionTab, selectVisMode, reorderVisionModel, updateVisionModelKey, updateVisionModelRole, toggleVisionModel, deleteVisionModel, collectVisionConfig } from './tab_vision.js?v=3.2.0';
+import { renderSearchTab, runSearchTest, collectSearchConfig } from './tab_search.js?v=3.2.0';
+import { renderSystemTab, testVaultConnectivity, syncAllVaultCredentials, saveAdminToken, collectSystemConfig } from './tab_system.js?v=3.2.0';
+import { openBindModelModal, onBindProviderChange, pickModelCard, confirmBindModel, openEditModelModal, confirmEditModel } from './modals.js?v=3.2.0';
 
 let appConfig = null;
 let vaultManifest = null;

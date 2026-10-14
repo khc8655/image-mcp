@@ -97,7 +97,7 @@ def test_storage_api(client):
 def test_admin_page_renders_current_version(client):
     r = client.get("/admin")
     assert r.status_code == 200
-    assert "v3.1.0" in r.text
-    assert "/static/js/app.js?v=3.1.0" in r.text
+    assert "v3.2.0" in r.text
+    assert "/static/js/app.js?v=3.2.0" in r.text
 
 

@@ -1,6 +1,6 @@
 [project]
 name = "khc-image-mcp"
-version = "3.1.0"
+version = "3.2.0"
 description = "多模态图片 MCP 服务：生图、修图、OCR 识图、搜图"
 requires-python = ">=3.11"
 dependencies = [
