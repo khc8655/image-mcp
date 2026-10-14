@@ -1,6 +1,6 @@
 // 系统与全局凭据资产微模块
-import { esc, showToast, openModal, closeModal } from './common.js?v=2.9.0';
-import { api, setStoredToken } from './api.js?v=2.9.0';
+import { esc, showToast, openModal, closeModal } from './common.js?v=3.1.0';
+import { api, setStoredToken } from './api.js?v=3.1.0';
 
 
 export function renderSystemTab(appConfig) {

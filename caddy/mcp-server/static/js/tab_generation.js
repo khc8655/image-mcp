@@ -1,5 +1,5 @@
 // 生图业务微模块 (极简顺序调度与全生命周期模型运维)
-import { esc, showToast } from './common.js?v=2.9.0';
+import { esc, showToast } from './common.js?v=3.1.0';
 
 export function renderGenerationTab(appConfig) {
   const gen = appConfig.generation || {};
