@@ -40,16 +40,23 @@
         </select>
       </div>
       <div class="form-field">
-        <label>默认办公场景预设 (Scene Preset)</label>
-        <select id="cfg_gen_scene">
-          <option value="auto" selected>auto — 自由生图 (纯跟随 Prompt)</option>
-          <option value="infra_scene">infra_scene — 信息化场景图 (智慧园区/数据中心全景/2.5D等距)</option>
-          <option value="network_topology">network_topology — 网络拓扑图 (扁平节点/网络线缆/企业IT架构)</option>
-          <option value="architecture">architecture — 系统软件架构图 (分层微服务/模块分区/色块明晰)</option>
-          <option value="product_scene">product_scene — 产品应用场景图 (突出产品本体/真实商业质感)</option>
-          <option value="infographic">infographic — 科技信息图 (汇报海报/技术白皮书/工整中文排版)</option>
-          <option value="icon_set">icon_set — 科技图标组 (极简扁平/一致色调/透明白底)</option>
+        <label>默认质量 (Agent 未指定 quality 时)</label>
+        <select id="cfg_gen_quality">
+          <option value="auto" selected>auto — 按模型列表顺序</option>
+          <option value="fast">fast — 优先非 Pro 模型，出图快</option>
+          <option value="best">best — 优先 Pro 模型并开启思考，适合密集文字与成品</option>
         </select>
+      </div>
+      <div class="form-field">
+        <label>默认搜索接地 (Agent 未指定 grounding 时)</label>
+        <select id="cfg_gen_grounding">
+          <option value="false" selected>关闭</option>
+          <option value="true">开启 — Gemini 先搜网页再画，真实建筑/产品更准，耗时更长</option>
+        </select>
+      </div>
+      <div class="form-field">
+        <label>默认张数 (Agent 未指定 count 时)</label>
+        <input id="cfg_gen_count" type="number" min="1" max="4" value="1">
       </div>
     </div>
   </div>

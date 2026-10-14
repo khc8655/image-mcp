@@ -47,72 +47,16 @@ ASPECT_TO_SIZE = {
     "4:5": "1024x1280",
     "5:4": "1280x1024",
     "21:9": "2048x896",
-}
-
-# ---------------------------------------------------------------------------
-# 办公/工作专业生图场景模板引擎 (Scene Presets)
-# ---------------------------------------------------------------------------
-SCENE_PRESETS = {
-    "infra_scene": {
-        "name": "信息化全景场景图",
-        "description": "智慧园区、数据中心机房、政务云平台、工业互联网全景示意图",
-        "default_aspect": "16:9",
-        "default_resolution": "2K",
-        "prompt_prefix": "Professional isometric 2.5D modern technology infographic illustration showing an advanced IT enterprise infrastructure, smart campus digital twin datacenter, sleek blue and cyan glowing network pathways, clean modular server racks, glass-walled command operations center, highly organized, ",
-        "prompt_suffix": ", 8k resolution, isometric perspective, clean corporate tech style, subtle cinematic lighting, unreal engine 5 render aesthetics, sharp focus",
-        "negative_prompt": "blurry, messy wires, cartoon, low resolution, distorted hardware, cluttered text artifacts, noise, abstract chaos"
-    },
-    "network_topology": {
-        "name": "网络拓扑示意图",
-        "description": "企业内网、混合云骨干网、SD-WAN、微隔离防火墙架构拓扑",
-        "default_aspect": "16:9",
-        "default_resolution": "2K",
-        "prompt_prefix": "Clean and modern enterprise computer network topology diagram, flat vector graphic style with isometric technical elements, organized network nodes including core routers, firewalls, cloud gateways, edge servers, neatly connected by structured glowing data fiber lines, clean white background, high contrast, ",
-        "prompt_suffix": ", professional network engineering schematic, symmetrical layout, crisp technical design, vector tech icons, minimalist UI aesthetics",
-        "negative_prompt": "photo, messy handwriting, illegible scribble, blurry, tangled lines, complex noise, dark background"
-    },
-    "architecture": {
-        "name": "系统软件架构图",
-        "description": "分层微服务、分布式架构、中台及数据流转分层示意",
-        "default_aspect": "16:9",
-        "default_resolution": "2K",
-        "prompt_prefix": "Modern software system architecture visual diagram, clean layered modular design, stratified color-coded components representing frontend client, API gateway, microservices cluster, distributed message queue, and database tier, clean directional flow arrows, elegant tech aesthetic, ",
-        "prompt_suffix": ", clean white presentation background, structured rectangular layout, enterprise architecture diagram style, ultra crisp details",
-        "negative_prompt": "messy, sketch, photorealistic face, random doodles, chaotic connections, dark dingy background"
-    },
-    "infographic": {
-        "name": "科技信息图/汇报海报",
-        "description": "技术白皮书插图、数字化转型成果汇报、工整中文与科技视觉排版",
-        "default_aspect": "3:4",
-        "default_resolution": "2K",
-        "prompt_prefix": "High-end corporate IT technology whitepaper infographic poster, balanced visual hierarchy, corporate cyan and deep navy color palette, sleek circular and modular metric charts, digital transformation motifs, neat layout, ",
-        "prompt_suffix": ", graphic design award winner, clean typography zones, corporate presentation poster, minimalist flat design with subtle 3D glassmorphism",
-        "negative_prompt": "cluttered, ugly, unaligned text, distorted shapes, low contrast, washed out colors"
-    },
-    "icon_set": {
-        "name": "科技图标与组件组",
-        "description": "PPT 与交互设计专用科技产品、云计算、安全、硬件扁平图标组",
-        "default_aspect": "1:1",
-        "default_resolution": "1K",
-        "prompt_prefix": "A unified set of 9 modern minimalist IT tech vector icons, grid layout on isolated pure white background, cohesive line art with subtle gradient accents representing cloud computing, cyber security shield, database server, fiber optic network, API integration, microchip, ",
-        "prompt_suffix": ", Dribbble award-winning icon set, consistent stroke weight, Figma design system style, perfectly centered icons",
-        "negative_prompt": "3D realistic render, photographic noise, shadows, uneven sizing, messy lines"
-    },
-    "product_scene": {
-        "name": "产品应用场景图",
-        "description": "突出产品本体、在典型商业/办公/工业场景中的落地示意，保持产品几何与质感",
-        "default_aspect": "16:9",
-        "default_resolution": "2K",
-        "prompt_prefix": "Commercial product in real-world professional application scene, clean commercial lighting, crisp details, high quality focus on the central subject, ",
-        "prompt_suffix": ", realistic material texture, clean depth of field, authentic corporate setting, professional studio photography style",
-        "negative_prompt": "deformed, blurry, low resolution, unnatural geometry, distorted text, cheap render artifacts"
-    }
+    "4:1": "2048x512",
+    "1:4": "512x2048",
+    "8:1": "2048x256",
+    "1:8": "256x2048",
 }
 
 
 # 内置已知供应商的默认推荐生图模型（本地独立预设加载失败时的开箱即用兜底）
 KNOWN_PROVIDER_IMAGE_MODELS = {
-    "google": ["gemini-3.1-flash-lite-image", "gemini-3.1-flash-image", "gemini-3-pro-image", "gemini-2.5-flash-image"],
+    "google": ["gemini-nano-banana-2.1", "gemini-3.1-flash-image", "gemini-3-pro-image", "gemini-3.1-flash-lite-image"],
     "minimax": ["image-01", "image-01-live"],
     "sensenova": ["sensenova-u1-fast"],
     "siliconflow": ["Kwai-Kolors/Kolors", "black-forest-labs/FLUX.1-schnell"],
@@ -132,7 +76,9 @@ KNOWN_PROVIDER_VISION_MODELS = {
 # ---------------------------------------------------------------------------
 # 初始化 MCP Server
 # ---------------------------------------------------------------------------
-mcp = FastMCP("image-mcp-suite")
+from prompting import SERVER_INSTRUCTIONS  # noqa: E402
+
+mcp = FastMCP("image-mcp-suite", instructions=SERVER_INSTRUCTIONS)
 
 
 
@@ -218,9 +164,11 @@ class GenerationResult(BaseModel):
     images: list[GeneratedImage]
     aspect_ratio: str
     resolution: str
-    scene: str
-    seed: int
+    quality: str = "auto"
+    grounding: bool = False
     elapsed_ms: int
+    model_note: str = Field("", description="模型随图返回的文字说明（如有）")
+    adjustments: list[str] = Field(default_factory=list, description="降级到其他模型时对请求做的改动")
     failed_attempts: list[Attempt] = []
 
 
@@ -304,9 +252,9 @@ def _pick_candidates(models: list[dict], target: str) -> list[dict]:
     return chosen + [x for x in models if x is not chosen[0]]
 
 
-AspectRatio = Literal["auto", "1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "4:5", "5:4", "21:9"]
+AspectRatio = Literal["auto", "1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "4:5", "5:4", "21:9", "4:1", "1:4", "8:1", "1:8"]
 Resolution = Literal["auto", "1K", "2K", "4K"]
-Scene = Literal["auto", "none", "infra_scene", "network_topology", "architecture", "infographic", "icon_set"]
+Quality = Literal["auto", "fast", "best"]
 VisionPreset = Literal["", "fast", "standard", "document", "gui"]
 
 

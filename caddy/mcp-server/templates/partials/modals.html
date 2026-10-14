@@ -19,6 +19,7 @@
       <div class="form-field" style="margin-top:14px;">
         <label id="bind_model_label">2. 选择模型 (点击单选)</label>
         <div id="bind_model_cards" class="capsule-list" style="display:flex;flex-direction:column;gap:8px;max-height:200px;overflow-y:auto;margin-top:6px;"></div>
+        <input type="text" id="bind_custom_model" class="mono-text" style="margin-top:8px;" placeholder="或手动填写模型 ID（填了就以这里为准），如 gemini-nano-banana-2.1">
       </div>
 
       <div class="form-field" id="bind_role_field" style="margin-top:14px;">
@@ -49,7 +50,7 @@
       <div class="form-grid-2">
         <div class="form-field">
           <label>模型 ID</label>
-          <input type="text" id="edit_model_id" readonly class="mono-text font-bold" style="background:var(--color-bg-page);color:var(--color-primary);">
+          <input type="text" id="edit_model_id" class="mono-text font-bold" style="color:var(--color-primary);" title="可直接改成上游实际的模型 ID">
         </div>
         <div class="form-field">
           <label>所属厂商</label>
@@ -68,10 +69,14 @@
         
         <!-- MiniMax 专属参数 -->
         <div id="editAdvMinimax" style="display:none;display:flex;flex-direction:column;gap:8px;">
-          <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;">
-            <input type="checkbox" id="adv_minimax_optimizer" checked>
-            <span>启用官方 Prompt 优化器 (自动扩展美化提示词)</span>
-          </label>
+          <div class="form-field">
+            <label style="font-size:12px;">官方 Prompt 优化器</label>
+            <select id="adv_minimax_optimizer">
+              <option value="auto" selected>auto — 提示词很短时才开（推荐，Agent 写的长描述不被改写）</option>
+              <option value="on">始终开启</option>
+              <option value="off">始终关闭</option>
+            </select>
+          </div>
           <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;">
             <input type="checkbox" id="adv_minimax_watermark">
             <span>官方 AIGC 水印</span>
@@ -81,15 +86,13 @@
         <!-- FLUX / Agnes 专属参数 -->
         <div id="editAdvAgnes" style="display:none;display:flex;flex-direction:column;gap:8px;">
           <div class="form-field">
-            <label style="font-size:12px;">默认分辨率画质</label>
+            <label style="font-size:12px;">分辨率档位（Agent 与后台默认都没给时使用）</label>
             <select id="adv_agnes_size">
-              <option value="1K">1K (标准速度)</option>
-              <option value="2K" selected>2K (超高清细节)</option>
+              <option value="1K">1K</option>
+              <option value="2K" selected>2K</option>
+              <option value="3K">3K</option>
+              <option value="4K">4K</option>
             </select>
-          </div>
-          <div class="form-field">
-            <label style="font-size:12px;">默认负向提示词 (Negative Prompt)</label>
-            <input type="text" id="adv_agnes_neg" placeholder="如：blurry, low quality, distorted">
           </div>
         </div>
 
@@ -112,6 +115,18 @@
               <option value="ALLOW_ALL">ALLOW_ALL (允许所有人像)</option>
             </select>
           </div>
+          <div class="form-field">
+            <label style="font-size:12px;">思考档位</label>
+            <select id="adv_google_thinking">
+              <option value="" selected>默认 — 仅 quality=best 时开启 high</option>
+              <option value="minimal">minimal — 始终最快</option>
+              <option value="high">high — 始终深度思考（慢，复杂图表更准）</option>
+            </select>
+          </div>
+          <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;">
+            <input type="checkbox" id="adv_google_image_search">
+            <span>搜索接地时同时用 Google 图片搜索（Nano Banana 2 / 2.1）</span>
+          </label>
         </div>
       </div>
     </div>

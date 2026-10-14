@@ -106,7 +106,7 @@ async def verify_all():
         tools = res_data.get("result", {}).get("tools", [])
         tool_names = [t["name"] for t in tools]
         print(f"[+] 已注册 MCP 工具列表 ({len(tool_names)} 个): {tool_names}")
-        for expected in ["generate_image", "edit_image", "describe_image", "search_images", "enhance_prompt", "list_models"]:
+        for expected in ["generate_image", "edit_image", "describe_image", "search_images", "transform_image", "list_models"]:
             assert expected in tool_names
 
         print("\n==================================================")

@@ -11,6 +11,8 @@ export async function openBindModelModal(targetType, getManifestFn, getPresetsFn
   document.getElementById('bind_target_type').value = targetType;
   document.getElementById('bindModalTitle').textContent = targetType === 'generation' ? '挂载生图模型' : '挂载识图模型';
   document.getElementById('bind_selected_model').value = '';
+  const customEl = document.getElementById('bind_custom_model');
+  if (customEl) customEl.value = '';
 
   const roleSel = document.getElementById('bind_role_select');
   if (roleSel) {
@@ -114,7 +116,8 @@ export function pickModelCard(modelId, cardEl) {
 export async function confirmBindModel(saveConfigFn) {
   const targetType = document.getElementById('bind_target_type')?.value;
   const provider = document.getElementById('bind_provider_select')?.value;
-  const model = document.getElementById('bind_selected_model')?.value.trim();
+  const custom = document.getElementById('bind_custom_model')?.value.trim();
+  const model = custom || document.getElementById('bind_selected_model')?.value.trim();
   const role = document.getElementById('bind_role_select')?.value;
 
   if (!provider || !model) {
@@ -217,18 +220,20 @@ export function openEditModelModal(targetType, idx, appConfig) {
       if (item.provider === 'minimax') {
         advSection.style.display = 'block';
         advMinimax.style.display = 'flex';
-        document.getElementById('adv_minimax_optimizer').checked = adv.prompt_optimizer !== false;
+        document.getElementById('adv_minimax_optimizer').value =
+          adv.prompt_optimizer === true ? 'on' : adv.prompt_optimizer === false ? 'off' : 'auto';
         document.getElementById('adv_minimax_watermark').checked = adv.aigc_watermark === true;
       } else if (item.provider === 'agnes' || item.provider === 'siliconflow') {
         advSection.style.display = 'block';
         advAgnes.style.display = 'flex';
         document.getElementById('adv_agnes_size').value = adv.size || '2K';
-        document.getElementById('adv_agnes_neg').value = adv.negative_prompt || '';
       } else if (item.provider === 'google') {
         advSection.style.display = 'block';
         advGoogle.style.display = 'flex';
         document.getElementById('adv_google_image_size').value = adv.image_size || '2K';
         document.getElementById('adv_google_person').value = adv.person_generation || 'ALLOW_ADULT';
+        document.getElementById('adv_google_thinking').value = adv.thinking_level || '';
+        document.getElementById('adv_google_image_search').checked = adv.image_search === true;
       } else {
         advSection.style.display = 'none';
       }
@@ -249,20 +254,37 @@ export async function confirmEditModel(saveConfigFn) {
   const item = list[idx];
   if (!item) return;
 
+  const newModelId = document.getElementById('edit_model_id')?.value.trim();
+  if (!newModelId) {
+    showToast('模型 ID 不能为空', 'warning');
+    return;
+  }
+  if (newModelId !== item.model && list.some((m, i) => i !== idx && m.provider === item.provider && m.model === newModelId)) {
+    showToast(`模型池中已存在「${newModelId}」`, 'warning');
+    return;
+  }
+  item.model = newModelId;
+
   const newRole = document.getElementById('edit_role_select')?.value || 'general';
   item.role = newRole;
 
   // 高级参数提取
   if (!item.advanced) item.advanced = {};
   if (item.provider === 'minimax') {
-    item.advanced.prompt_optimizer = document.getElementById('adv_minimax_optimizer')?.checked !== false;
+    const opt = document.getElementById('adv_minimax_optimizer')?.value || 'auto';
+    if (opt === 'auto') delete item.advanced.prompt_optimizer;
+    else item.advanced.prompt_optimizer = opt === 'on';
     item.advanced.aigc_watermark = document.getElementById('adv_minimax_watermark')?.checked === true;
   } else if (item.provider === 'agnes' || item.provider === 'siliconflow') {
     item.advanced.size = document.getElementById('adv_agnes_size')?.value || '2K';
-    item.advanced.negative_prompt = document.getElementById('adv_agnes_neg')?.value || '';
+    delete item.advanced.negative_prompt;
   } else if (item.provider === 'google') {
     item.advanced.image_size = document.getElementById('adv_google_image_size')?.value || '2K';
     item.advanced.person_generation = document.getElementById('adv_google_person')?.value || 'ALLOW_ADULT';
+    const think = document.getElementById('adv_google_thinking')?.value || '';
+    if (think) item.advanced.thinking_level = think;
+    else delete item.advanced.thinking_level;
+    item.advanced.image_search = document.getElementById('adv_google_image_search')?.checked === true;
   }
 
   closeModal('editModelModal');

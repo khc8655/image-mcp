@@ -3,11 +3,51 @@
 新增或调整厂商协议只需改这里与 presets/*.json。
 """
 
+import asyncio
+
 import httpx
 
 from config_manager import config_mgr
 
 from core import ASPECT_TO_SIZE, detect_image_mime, resolve_image_to_base64, logger
+from prompting import normalize_gemini_model, gemini_supports_reasoning, minimax_prompt_optimizer
+
+
+class SafetyBlocked(RuntimeError):
+    """上游安全策略拦截：换模型通常也会被拦，提示 Agent 改写。"""
+
+
+_GEMINI_BLOCK_REASONS = {"SAFETY", "IMAGE_SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST", "SPII", "RECITATION"}
+
+
+def parse_gemini_images(resp_json: dict, label: str = "") -> list[dict]:
+    """解析 generateContent 响应；模型附带的文字说明放进第一张图的 note 字段。"""
+    block = (resp_json.get("promptFeedback") or {}).get("blockReason")
+    if block:
+        raise SafetyBlocked(f"Gemini 拒绝了该提示词（{block}）。请换一种说法：去掉真实人物姓名、品牌商标或敏感描述后重试")
+    images, notes = [], []
+    finish = ""
+    for candidate in resp_json.get("candidates", []):
+        finish = candidate.get("finishReason", "") or finish
+        for part in candidate.get("content", {}).get("parts", []):
+            if part.get("thought"):
+                continue
+            inline_data = part.get("inlineData") or part.get("inline_data")
+            if inline_data and "data" in inline_data:
+                images.append({
+                    "b64": inline_data["data"],
+                    "mime": inline_data.get("mimeType", inline_data.get("mime_type", "image/png")),
+                })
+            elif part.get("text"):
+                notes.append(part["text"].strip())
+    if not images:
+        if finish in _GEMINI_BLOCK_REASONS:
+            raise SafetyBlocked(f"Gemini 安全策略拦截了生成结果（{finish}）。请调整描述后重试，例如去掉真实人物、商标或敏感元素")
+        hint = f"：{notes[0][:200]}" if notes else ""
+        raise RuntimeError(f"Google ({label}) 未返回图像{hint}")
+    if notes:
+        images[0]["note"] = " ".join(notes)[:500]
+    return images
 
 
 # ---------------------------------------------------------------------------
@@ -72,7 +112,10 @@ async def execute_image_generation(
     seed: int = -1,
     negative_prompt: str = "",
     count: int = 1,
-    advanced: dict = None
+    advanced: dict = None,
+    reference_images_b64: list = None,
+    grounding: bool = False,
+    thinking: str = "",
 ) -> list[dict]:
     """根据本服务端存储的 provider 配置与 adapter_rules.image_generation 规则调用上游生图接口"""
     prov, used_label, api_key = resolve_local_provider_and_key(provider_id, key_label)
@@ -86,6 +129,7 @@ async def execute_image_generation(
 
     # 驱动 1: Google Gemini / Vertex 原生生图协议 (:generateContent)
     if protocol in ("gemini_image", "gemini_generate_content"):
+        clean_model = normalize_gemini_model(clean_model)
         headers = {"Content-Type": "application/json"}
         # 自动识别 Google AI Studio / Gemini Developer Key (AIza... / AQ...) 与 Vertex AI Key
         if api_key.startswith("AIza") or api_key.startswith("AQ."):
@@ -99,58 +143,65 @@ async def execute_image_generation(
             url = f"https://{host}/v1/projects/{project}/locations/{location}/publishers/google/models/{clean_model}:generateContent"
             headers["x-goog-api-key"] = api_key
 
-        gen_cfg = {
-            "responseModalities": rules.get("response_modalities", ["TEXT", "IMAGE"]),
-            "imageConfig": {"aspectRatio": aspect_ratio}
-        }
+        image_cfg = {"aspectRatio": aspect_ratio}
         res_upper = (resolution or "").strip().upper()
         if res_upper in ("1K", "2K", "4K"):
-            gen_cfg["imageConfig"]["imageSize"] = res_upper
+            image_cfg["imageSize"] = res_upper
         elif adv.get("image_size"):
-            gen_cfg["imageConfig"]["imageSize"] = adv["image_size"]
-
-        if seed is not None and seed >= 0:
-            gen_cfg["seed"] = seed
-
+            image_cfg["imageSize"] = adv["image_size"]
         if adv.get("person_generation"):
-            gen_cfg["personGeneration"] = adv["person_generation"]
+            image_cfg["personGeneration"] = adv["person_generation"]
+        base_cfg = {
+            "responseModalities": rules.get("response_modalities", ["TEXT", "IMAGE"]),
+            "imageConfig": image_cfg,
+        }
 
-        full_prompt = prompt
-        if negative_prompt:
-            full_prompt = f"{prompt}\n[Avoid/Negative Prompt: {negative_prompt}]"
-
+        parts = []
         if action == "edit" and image_b64:
-            parts = [
-                {"inlineData": {"mimeType": detect_image_mime(image_b64), "data": image_b64}},
-                {"text": full_prompt}
-            ]
+            parts.append({"inlineData": {"mimeType": detect_image_mime(image_b64), "data": image_b64}})
+            for ref in (reference_images_b64 or [])[:13]:
+                parts.append({"inlineData": {"mimeType": detect_image_mime(ref), "data": ref}})
             if mask_b64:
-                parts.insert(1, {"inlineData": {"mimeType": detect_image_mime(mask_b64), "data": mask_b64}})
-            payload = {
-                "contents": {"role": "USER", "parts": parts},
-                "generationConfig": gen_cfg
-            }
-        else:
-            payload = {
-                "contents": {"role": "USER", "parts": [{"text": full_prompt}]},
-                "generationConfig": gen_cfg
-            }
+                parts.append({"inlineData": {"mimeType": detect_image_mime(mask_b64), "data": mask_b64}})
+        parts.append({"text": prompt})
 
-        resp = await client.post(url, json=payload, headers=headers, timeout=timeout)
-        if resp.status_code != 200:
-            raise RuntimeError(f"Google ({used_label}) 出图异常 ({resp.status_code}): {resp.text[:300]}")
-        resp_json = resp.json()
-        images = []
-        for candidate in resp_json.get("candidates", []):
-            for part in candidate.get("content", {}).get("parts", []):
-                inline_data = part.get("inlineData") or part.get("inline_data")
-                if inline_data and "data" in inline_data:
-                    images.append({
-                        "b64": inline_data["data"],
-                        "mime": inline_data.get("mimeType", inline_data.get("mime_type", "image/png"))
-                    })
+        reasoning_ok = gemini_supports_reasoning(clean_model)
+        extras = {}
+        if grounding and reasoning_ok:
+            search = {"googleSearch": {}}
+            if adv.get("image_search"):
+                search = {"googleSearch": {"searchTypes": {"webSearch": {}, "imageSearch": {}}}}
+            extras["tools"] = [search]
+        level = thinking or adv.get("thinking_level") or ""
+        if level and reasoning_ok:
+            extras["thinkingConfig"] = {"thinkingLevel": level}
+
+        def _payload(with_extras: bool) -> dict:
+            cfg = dict(base_cfg)
+            body = {"contents": [{"role": "user", "parts": parts}], "generationConfig": cfg}
+            if with_extras:
+                if "thinkingConfig" in extras:
+                    cfg["thinkingConfig"] = extras["thinkingConfig"]
+                if "tools" in extras:
+                    body["tools"] = extras["tools"]
+            return body
+
+        async def _one() -> list[dict]:
+            resp = await client.post(url, json=_payload(True), headers=headers, timeout=timeout)
+            if resp.status_code == 400 and extras:
+                # 部分区域/版本不接受 tools 或 thinkingConfig：去掉增强项重试一次，不让整次调用失败
+                logger.warning(f"Google 拒绝增强参数，去掉 tools/thinking 重试: {resp.text[:200]}")
+                resp = await client.post(url, json=_payload(False), headers=headers, timeout=timeout)
+            if resp.status_code != 200:
+                raise RuntimeError(f"Google ({used_label}) 出图异常 ({resp.status_code}): {resp.text[:300]}")
+            return parse_gemini_images(resp.json(), used_label)
+
+        n = max(1, min(int(count or 1), 4))
+        batches = await asyncio.gather(*[_one() for _ in range(n)], return_exceptions=True)
+        images = [img for b in batches if isinstance(b, list) for img in b]
         if not images:
-            raise RuntimeError(f"Google ({used_label}) 未返回有效图像数据")
+            first_err = next((b for b in batches if isinstance(b, Exception)), None)
+            raise first_err or RuntimeError(f"Google ({used_label}) 未返回有效图像数据")
         return images
 
     # 驱动 2: MiniMax 海螺生图协议 (/v1/image_generation)
@@ -168,18 +219,18 @@ async def execute_image_generation(
             "model": clean_model or "image-01",
             "prompt": prompt,
             "response_format": "base64",
-            "prompt_optimizer": adv.get("prompt_optimizer", True)
+            "n": max(1, min(int(count or 1), 4)),
         }
         if "aigc_watermark" in adv:
             payload["aigc_watermark"] = bool(adv["aigc_watermark"])
         if isinstance(rules.get("default_params"), dict):
-            payload.update(rules["default_params"])
+            payload.update({k: v for k, v in rules["default_params"].items() if k != "prompt_optimizer"})
+        # Agent 写好的完整描述不让 MiniMax 再改写；可在模型 advanced.prompt_optimizer 显式覆盖
+        payload["prompt_optimizer"] = minimax_prompt_optimizer(prompt, adv.get("prompt_optimizer"))
 
         payload["aspect_ratio"] = aspect_ratio
         if seed is not None and seed >= 0:
             payload["seed"] = seed
-        if negative_prompt:
-            payload["negative_prompt"] = negative_prompt
 
         if action == "edit" and image_b64:
             ref_field = rules.get("edit_reference_field", "subject_reference")
@@ -218,25 +269,25 @@ async def execute_image_generation(
 
         size = adv.get("size") or rules.get("default_size", "2K")
         res_upper = (resolution or "").strip().upper()
-        if res_upper in ("1K", "2K", "4K"):
+        if res_upper in ("1K", "2K", "3K", "4K"):
             size = res_upper
         allowed_ratios = rules.get("allowed_aspect_ratios", ["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "21:9"])
         ratio = aspect_ratio if aspect_ratio in allowed_ratios else "1:1"
 
         extra_body = {"response_format": "b64_json"}
-        neg = negative_prompt or adv.get("negative_prompt")
-        if neg:
-            extra_body["negative_prompt"] = neg
         if seed is not None and seed >= 0:
             extra_body["seed"] = seed
         if action == "edit" and image_b64:
-            extra_body["image"] = [f"data:{detect_image_mime(image_b64)};base64,{image_b64}"]
+            extra_body["image"] = [
+                f"data:{detect_image_mime(b)};base64,{b}" for b in [image_b64, *(reference_images_b64 or [])]
+            ]
 
         payload = {
             "model": clean_model or "agnes-image-2.5-flash",
             "prompt": prompt,
             "size": size,
             "ratio": ratio,
+            "n": max(1, min(int(count or 1), 4)),
             "extra_body": extra_body
         }
         if action != "edit":

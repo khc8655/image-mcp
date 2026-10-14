@@ -1,67 +1,13 @@
-"""辅助工具：提示词增强与模型/配置查询。"""
-from typing import Literal
-
-import httpx
-
+"""辅助工具：模型与配置查询。"""
 from config_manager import config_mgr
 
-import providers
-from core import (
-    mcp, logger, SCENE_PRESETS, _annotations, APP_VERSION,
-)
-
-
-# ---------------------------------------------------------------------------
-# 辅助工具: 提示词增强与能力列表
-# ---------------------------------------------------------------------------
-@mcp.tool(annotations=_annotations(read_only=True, title="提示词增强"))
-async def enhance_prompt(prompt: str, style: str = "realistic", purpose: Literal["general", "work"] = "general") -> str:
-    """根据目标风格与用途自动优化扩展绘图提示词。
-
-    参数说明:
-        prompt: 用户的简短原始构思。
-        style: 画面风格偏好，例如 "realistic", "isometric", "vector", "cyberpunk", "minimalist" 等。
-        purpose: 用途场景，"general"(通用艺术创作) 或 "work"(信息化建设/办公拓扑/软件架构专业场景)。
-    """
-    client: httpx.AsyncClient = getattr(mcp, "_http_client", None)
-    if not client:
-        raise RuntimeError("HTTP 客户端未启动")
-
-    if purpose == "work" or style in ("work", "tech", "topology", "architecture", "infographic", "product_scene"):
-        sys_prompt = (
-            "你是企业技术视觉设计专家。把用户构思扩写为可直接用于图像模型的英文 Prompt。最高优先级是忠实保留用户明确列出的设备、服务、层级、边界、数据流、连接方向、产品形状与标签；绝不新增、删除或重命名组件与连线。"
-            "若信息缺失或关系不明，不要猜测或补造；用克制的占位/留白表达未指定部分。技术图优先使用二维矢量、清晰分区、正交连线、明确箭头和短标签；产品场景突出产品本体并保持其几何、材质和颜色。"
-            "避免装饰性连接线、伪造品牌、长段落文本和模型自作主张的结构。"
-            f"风格偏好: {style}。\n"
-            "直接输出优化后的英文 Prompt，不要包含任何前导词或额外解释。\n\n"
-            f"用户构思: {prompt}"
-        )
-    else:
-        sys_prompt = f"你是一个顶级 AI 绘图提示词大师。请将用户的简短构思扩写为适用于 Midjourney/Imagen 的极具美感、细节丰富的绘图 Prompt。风格偏好: {style}。直接输出优化后的英文 Prompt，不要任何解释。\n\n用户构思: {prompt}"
-
-    vision_models = [
-        m for m in config_mgr.get("vision", "models", default=[])
-        if isinstance(m, dict) and m.get("enabled", True)
-    ]
-    for vm in vision_models:
-        try:
-            res = await providers.execute_vision_completion(
-                client=client,
-                provider_id=vm["provider"],
-                model=vm["model"],
-                key_label=vm.get("key", ""),
-                prompt=sys_prompt
-            )
-            if res:
-                return res
-        except Exception as e:
-            logger.warning(f"提示词优化节点 {vm.get('provider')}/{vm.get('model')} 失败: {e}")
-    return prompt
+import prompting
+from core import mcp, _annotations, APP_VERSION
 
 
 @mcp.tool(annotations=_annotations(read_only=True, open_world=False, idempotent=True, title="模型与配置查询"))
 async def list_models() -> dict:
-    """查询当前系统在本地已持久化的供应商、生图模型池、识图模型池、办公场景模板及运行配置。"""
+    """List configured providers, generation/vision model order and the server defaults applied when a parameter is omitted."""
     cfg = config_mgr.get_all()
     provs = cfg.get("providers", {})
     return {
@@ -81,11 +27,13 @@ async def list_models() -> dict:
         "generation_defaults": {
             "aspect_ratio": cfg.get("generation", {}).get("default_aspect_ratio") or cfg.get("generation", {}).get("default_aspect", "1:1"),
             "resolution": cfg.get("generation", {}).get("default_resolution", "auto"),
-            "scene": cfg.get("generation", {}).get("default_scene", "none"),
+            "quality": cfg.get("generation", {}).get("default_quality", "auto"),
+            "grounding": bool(cfg.get("generation", {}).get("default_grounding", False)),
+            "count": cfg.get("generation", {}).get("default_count", 1),
         },
-        "available_scenes": [
-            {"id": sid, "name": sinfo["name"], "description": sinfo["description"]}
-            for sid, sinfo in SCENE_PRESETS.items()
+        "work_scene_prompts": [
+            {"name": k, "title": v["title"], "description": v["description"]}
+            for k, v in prompting.WORK_SCENE_PROMPTS.items()
         ],
         "generation_models": [
             {k: m.get(k) for k in ("provider", "model", "role", "enabled")}

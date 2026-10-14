@@ -79,12 +79,6 @@ async def run_diagnostics():
         is_err = res.get("result", {}).get("isError", False) or "error" in res
         print(f"[*] 工具 search_images -> {'❌ 失败' if is_err else '✅ 正常'}")
 
-        # 3.3 enhance_prompt
-        r = await client.post(f"{domain}/mcp", json={"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {"name": "enhance_prompt", "arguments": {"prompt": "可爱的小猫", "style": "anime"}}}, headers=mcp_headers)
-        res = parse_sse_response(r.text)
-        is_err = res.get("result", {}).get("isError", False) or "error" in res
-        print(f"[*] 工具 enhance_prompt -> {'❌ 失败' if is_err else '✅ 正常'}")
-
         # 3.4 describe_image (使用小图片测试)
         tiny_png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
         r = await client.post(f"{domain}/mcp", json={"jsonrpc": "2.0", "id": 6, "method": "tools/call", "params": {"name": "describe_image", "arguments": {"image": f"data:image/png;base64,{tiny_png}", "prompt": "描述这张图片"}}}, headers=mcp_headers)
