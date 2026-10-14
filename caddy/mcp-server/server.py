@@ -44,7 +44,7 @@ from tools.generation import generate_image, edit_image  # noqa: E402,F401
 from tools.vision import describe_image  # noqa: E402,F401
 from tools.search import search_images  # noqa: E402,F401
 from tools.transform import transform_image  # noqa: E402,F401
-from tools.misc import enhance_prompt, list_models  # noqa: E402,F401
+from tools.misc import list_models  # noqa: E402,F401
 
 
 # ---------------------------------------------------------------------------

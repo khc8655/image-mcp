@@ -68,17 +68,22 @@
 
 ## MCP 核心工具清单 (Model Context Protocol 2.0.0)
 
-向 AI Agent 暴露 7 个工具（均带 annotations 与 outputSchema，返回 structuredContent）：
+向 AI Agent 暴露 6 个工具和 6 个工作场景 prompt（均带 annotations 与 outputSchema，返回 structuredContent）：
 
 | 工具名称 | 类别 | 功能说明 | 典型入参 |
 | :--- | :--- | :--- | :--- |
-| **`generate_image`** | 生图 | 文生图，10 种比例、4 级画质、5 个办公场景模板；返回签名链接 + 缩略图 | `prompt`, `aspect_ratio`, `resolution`, `scene`, `negative_prompt`, `seed`, `count`, `model` |
-| **`edit_image`** | 生图 | AI 改图、风格重绘、mask 局部重绘 | `image`, `prompt`, `mask`, `aspect_ratio`, `count`, `model` |
+| **`generate_image`** | 生图 | Gemini Nano Banana 文生图。提示词由 Agent 按工具描述里的写法撰写并原样发送；未传参数走后台默认 | `prompt`, `aspect_ratio`, `resolution`, `quality`, `grounding`, `count` |
+| **`edit_image`** | 生图 | AI 改图、多图合成（最多 13 张参考图）、可选 mask | `image`, `prompt`, `reference_images`, `mask`, `aspect_ratio`, `quality`, `count` |
 | **`transform_image`** | 修图 | 本地裁剪/旋转/翻转/缩放/放大/去背景/格式转换，零额度 | `image`, `crop`, `rotate`, `flip`, `width`, `height`, `upscale`, `remove_background`, `format` |
 | **`describe_image`** | 识图 | 分级 OCR：fast 本地 / standard / document（本地 OCR 校对）/ gui（结构化坐标） | `image`, `prompt`, `preset`, `model` |
 | **`search_images`** | 搜图 | 文字搜图；以图搜图（配置 SerpAPI 时走 Google Lens） | `query`, `image`, `size`, `aspect_ratio`, `limit` |
-| **`enhance_prompt`** | 辅助 | 将简短中文构思自动扩写为专业级英文绘图或办公架构拓扑提示词 | `prompt`, `style`, `purpose` |
-| **`list_models`** | 辅助 | 查询当前服务端已持久化的模型池、办公场景模板与当前调度模式 | 无 |
+| **`list_models`** | 辅助 | 查询模型顺序与后台默认值 | 无 |
+
+**给 Agent 的说明分三层**：`instructions`（连接时下发：什么时候用哪个工具）→ 工具描述（Gemini 提示词写法 7 条 + 示例）→ MCP prompts（`architecture_diagram`、`network_topology`、`infographic`、`slide_background`、`product_shot`、`cover_banner` 六个工作场景范例，需要时拉取）。
+
+**模型与降级**：后台模型列表从上到下调度，建议 `gemini-nano-banana-2.1` 在前、`gemini-3-pro-image` 作为 `quality=best` 的首选，MiniMax / Agnes 作为降级。降级时自动适配：比例改为目标模型支持的最接近值、MiniMax 提示词截断到 1500 字符并对长提示词关闭 `prompt_optimizer`、搜索接地仅 Gemini 生效；所有改动写在结果的 `adjustments` 里。被安全策略拦截时不降级，直接把改写建议返回给 Agent。
+
+Vertex AI 与 AI Studio 的模型 ID 一致：Nano Banana 2.1 = `gemini-nano-banana-2.1`，Nano Banana 2 = `gemini-3.1-flash-image`，Nano Banana Pro = `gemini-3-pro-image`。旧的 `-preview` ID 与 `nano-banana-2` 这类俗称会自动映射。
 
 ---
 

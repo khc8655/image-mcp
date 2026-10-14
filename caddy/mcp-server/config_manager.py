@@ -127,6 +127,10 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "generation": {
         "default_mode": "sequential",  # sequential
         "timeout_seconds": 45,
+        "timeout_seconds_extended": 120,  # quality=best（思考）或搜索接地时的超时
+        "default_quality": "auto",        # Agent 未传 quality 时：auto | fast | best
+        "default_grounding": False,       # Agent 未传 grounding 时是否开启 Gemini 搜索接地
+        "default_count": 1,
         "fallback_enabled": True,
         "return_mode": "url",      # url: 签名 URL + 缩略图 | inline: 原图 Base64
         "url_ttl_hours": 24,

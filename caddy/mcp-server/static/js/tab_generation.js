@@ -13,8 +13,14 @@ export function renderGenerationTab(appConfig) {
   const aspectEl = document.getElementById('cfg_gen_aspect');
   if (aspectEl) aspectEl.value = gen.default_aspect_ratio || '16:9';
 
-  const sceneEl = document.getElementById('cfg_gen_scene');
-  if (sceneEl) sceneEl.value = gen.default_scene || 'auto';
+  const qualityEl = document.getElementById('cfg_gen_quality');
+  if (qualityEl) qualityEl.value = gen.default_quality || 'auto';
+
+  const groundEl = document.getElementById('cfg_gen_grounding');
+  if (groundEl) groundEl.value = gen.default_grounding ? 'true' : 'false';
+
+  const countEl = document.getElementById('cfg_gen_count');
+  if (countEl) countEl.value = gen.default_count || 1;
 
   // 渲染活跃模型池表格
   const tbody = document.getElementById('genModelsTbody');
@@ -129,7 +135,9 @@ export function collectGenerationConfig(appConfig) {
   appConfig.generation.timeout_seconds = parseInt(document.getElementById('cfg_gen_timeout')?.value, 10) || 45;
   appConfig.generation.default_resolution = document.getElementById('cfg_gen_resolution')?.value || '2K';
   appConfig.generation.default_aspect_ratio = document.getElementById('cfg_gen_aspect')?.value || '16:9';
-  appConfig.generation.default_scene = document.getElementById('cfg_gen_scene')?.value || 'auto';
+  appConfig.generation.default_quality = document.getElementById('cfg_gen_quality')?.value || 'auto';
+  appConfig.generation.default_grounding = document.getElementById('cfg_gen_grounding')?.value === 'true';
+  appConfig.generation.default_count = Math.min(4, Math.max(1, parseInt(document.getElementById('cfg_gen_count')?.value, 10) || 1));
   appConfig.generation.default_mode = 'sequential';
 }
 

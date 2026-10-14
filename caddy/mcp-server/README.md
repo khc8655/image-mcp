@@ -140,13 +140,14 @@ caddy/mcp-server/
 ### 3.2 厂商高级参数动态注入机制
 在模型池中，每个模型条目可包含可选的 `advanced` 字典，调用 `execute_image_generation` 时会自动解构并注入上游官方 Payload：
 - **MiniMax**：
-  - `prompt_optimizer`: 布尔值，控制是否开启官方提示词美化器；
+  - `prompt_optimizer`: 布尔值，强制开/关官方提示词美化器（默认：提示词少于 120 字符才开启）；
   - `aigc_watermark`: 布尔值，控制是否在生成图打上 AIGC 水印。
 - **FLUX / Agnes**：
-  - `size`: 分辨率，可选 `"1K"` 或 `"2K"`；
-  - `negative_prompt`: 默认负向提示词，如 `blurry, low quality`。
-- **Google Imagen / Gemini**：
-  - `person_generation`: 人像安全等级，可选 `"ALLOW_ADULT"`, `"DONT_ALLOW"`, `"ALLOW_ALL"`。
+  - `size`: 分辨率，可选 `"1K"` / `"2K"` / `"3K"` / `"4K"`。
+- **Google Gemini**：
+  - `person_generation`: 人像安全等级，可选 `"ALLOW_ADULT"`, `"DONT_ALLOW"`, `"ALLOW_ALL"`；
+  - `thinking_level`: 固定思考档位（`"minimal"` / `"high"`），不设则仅 `quality=best` 时用 `high`；
+  - `image_search`: 布尔值，搜索接地时同时启用 Google 图片搜索（Nano Banana 2 / 2.1）。
 
 ### 3.3 识图分级体系与本地 RapidOCR
 `describe_image` 支持 `preset` 等级：
@@ -170,28 +171,11 @@ caddy/mcp-server/
 4. **单测数据隔离**：
    - `scratch/test_e2e_flow.py` 使用独立临时测试文件 `test_config.json` 进行全流程验证并在结束后自动销毁，彻底杜绝污染生产 `config.json`。
 
-### 3.5 v3.0 办公生图参数扩展与场景模板引擎 (方案 A+B)
-针对工作信息化、网络拓扑图与架构图等专业级办公使用场景，v3.0 进行了深度扩展，保持纯粹生图定位（复杂代码图表由 Agent 本身处理）：
-1. **生图参数全量扩展 (方案 A)**：
-   - **10 大主流宽高比**：涵盖 `1:1`, `16:9`, `9:16`, `4:3`, `3:4`, `3:2`, `2:3`, `4:5`, `5:4`, `21:9`（带鱼屏/全景）；
-   - **画质分辨率等级**：支持 `auto`, `1K`, `2K`, `4K`，自动适配 Google Gemini 3 Pro `imageConfig.imageSize` 与 Agnes 等上游尺寸控制；
-   - **种子与并发张数**：入参支持 `seed` (锁定随机性以复现风格) 与 `count` (并发生成张数)；
-   - **负向提示词**：支持 `negative_prompt` 参数，在上游各引擎（Google、MiniMax、Agnes、OpenAI 等）中精准注入排除负向要素。
-2. **5 大专业办公场景模板引擎 (方案 B)**：
-   通过 `scene` 参数一键调用内置专业企业级提示词、工程后缀、负向词与默认画幅比例：
-   - `infra_scene`: **信息化全景场景图**（智慧园区/IDC机房/政务云/工业互联网 2.5D 高清示意图）；
-   - `network_topology`: **网络拓扑示意图**（核心路由/防火墙/混合云骨干网白底整洁连线效果图）；
-   - `architecture`: **系统软件架构图**（分层微服务/API网关/数据流清晰色块图）；
-   - `infographic`: **科技信息图/汇报海报**（技术白皮书与数字化汇报高质感排版图）；
-   - `icon_set`: **科技图标与组件组**（极简纯白底扁平科技图标套件）；
-   - `none`: 不套用任何模板，使用纯净提示词。
-3. **出图自动持久化与回源支持**：
-   出图自动写入 `static/generated/YYYYMMDD/*.png`，并通过 EdgeOne 边缘回源 `https://oc.khc6.cn/static/generated/...` 供浏览器即时预览与下载。
-4. **安全加固与底层修复**：
-   - 防御 LFI 本地敏感文件泄露：`resolve_image_to_base64` 严禁读取系统路径 (`/etc/passwd`)、凭据文件 (`config.json`) 及跨目录穿越 (`..`)；
-   - 多模态 MIME 动态嗅探：自动检测 JPEG/PNG/WebP/GIF Magic Bytes，根除 MIME 格式混淆异常。
-5. **专业级提示词扩写**：
-   `enhance_prompt` 增加 `purpose="work"` 支持，面向企业架构设计与信息化技术场景进行专业级提示词自动扩写。
+### 3.5 Agent 优先的生图（v3.1，取代 v3.0 场景模板与 enhance_prompt）
+- 提示词由调用方 Agent 撰写并原样发送给 Gemini；服务端不再拼接 SD 风格前后缀，也不再提供 `negative_prompt` / `seed` / `scene` / `model` 参数（Gemini 不支持负向提示词，模型顺序由后台决定）。
+- Agent 未传的 `aspect_ratio` / `resolution` / `quality` / `grounding` / `count` 走后台 `generation.default_*`。
+- `quality=best`：Pro 级模型提前并开启 `thinkingLevel=high`；`grounding=true`：Gemini 请求带 `googleSearch` 工具。上游拒绝这两个增强项（400）时自动去掉重试一次。
+- 原 5 个场景模板改为 MCP prompts 范例，按 Google 官方叙述式写法重写。
 
 ---
 

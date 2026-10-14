@@ -18,14 +18,15 @@ async def test_aspect_auto_uses_admin_default(upstream):
 
 @pytest.mark.asyncio
 async def test_explicit_square_not_overridden(upstream):
-    await server.generate_image(prompt="x", aspect_ratio="1:1", scene="infographic")
+    await server.generate_image(prompt="x", aspect_ratio="1:1")
     assert upstream.calls[-1]["aspect_ratio"] == "1:1"
 
 
 @pytest.mark.asyncio
-async def test_scene_default_aspect(upstream):
-    await server.generate_image(prompt="x", scene="infographic")
-    assert upstream.calls[-1]["aspect_ratio"] == "3:4"
+async def test_prompt_sent_unchanged(upstream):
+    p = 'A clean isometric diagram with a link labeled "SD-WAN".'
+    await server.generate_image(prompt=p)
+    assert upstream.calls[-1]["prompt"] == p
 
 
 @pytest.mark.asyncio
@@ -75,9 +76,12 @@ async def test_edit_with_mask_routes_to_mask_capable(upstream):
 
 
 @pytest.mark.asyncio
-async def test_model_targeting_exact(upstream):
-    await server.generate_image(prompt="x", model="google/gemini-3.1-flash-image")
-    assert upstream.calls[-1]["provider_id"] == "google"
+async def test_quality_best_prefers_pro(upstream):
+    server.config_mgr._config["generation"]["models"].append(
+        {"provider": "google", "model": "gemini-3-pro-image", "enabled": True})
+    await server.generate_image(prompt="x", quality="best")
+    call = upstream.calls[-1]
+    assert call["model"] == "gemini-3-pro-image" and call["thinking"] == "high"
 
 
 @pytest.mark.asyncio
